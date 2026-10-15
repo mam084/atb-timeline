@@ -10,7 +10,17 @@
       "$table": {
         ".read": true,
         ".write": "auth != null && root.child('owners').child($table).val() === auth.uid",
-        ".validate": "newData.hasChildren(['state']) && newData.child('state').isString() && newData.child('state').val().length < 200000"
+        ".validate": "newData.hasChildren(['state']) && newData.child('state').isString() && newData.child('state').val().length < 400000"
+      }
+    },
+    "requests": {
+      "$table": {
+        ".read": "auth != null && root.child('owners').child($table).val() === auth.uid",
+        ".write": "auth != null && root.child('owners').child($table).val() === auth.uid",
+        "$request": {
+          ".write": "auth != null && !data.exists() && newData.child('uid').val() === auth.uid",
+          ".validate": "newData.hasChildren(['uid', 'type']) && newData.child('type').isString() && newData.child('type').val().length <= 10 && (!newData.child('name').exists() || (newData.child('name').isString() && newData.child('name').val().length <= 40))"
+        }
       }
     }
   }
