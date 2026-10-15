@@ -1,0 +1,707 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body>
+<title>ATB Battle Timeline</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one column. Player-facing timeline strip on top, GM console (current turn | roster) below, settings + log at the foot. Single dark "orbal console" look. */
+:root {
+  --bg: #0a0d0f;
+  --surface: #11171a;
+  --surface-2: #172024;
+  --line: #243035;
+  --fg: #e4ecee;
+  --muted: #8b9ca1;
+  --accent: #4fb6b1;
+  --accent-tint: #0e2224;
+  --ally: #5cc480;
+  --enemy: #f06c6c;
+  --cast: #f29550;
+  --gold: #e3b94e;
+  --blue: #5ea6ec;
+  --font-display: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--bg); color: var(--fg); }
+body { font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+.app {
+  max-width: 1240px; margin: 0 auto;
+  padding-block: 20px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 18px;
+}
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; margin: 0; text-wrap: balance; letter-spacing: .01em; }
+h1 { font-size: 1.6rem; }
+h2 { font-size: 1.2rem; }
+h3 { font-size: .8rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); font-weight: 600; }
+.muted { color: var(--muted); }
+.mono, .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible, .slot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn {
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px;
+  padding: 7px 12px; font-family: var(--font-display); font-weight: 600; font-size: .88rem; letter-spacing: .02em;
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+}
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.1); }
+.btn.ghost { background: transparent; }
+.btn.small { padding: 4px 8px; font-size: .78rem; border-radius: 6px; }
+.btn.warn:hover { border-color: var(--enemy); color: var(--enemy); }
+.btn.gold { border-color: color-mix(in srgb, var(--gold) 55%, var(--line)); color: var(--gold); }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+input, select {
+  font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; padding: 6px 8px; min-width: 0;
+}
+input[type="number"] { font-family: var(--font-mono); width: 4.6em; }
+input[type="range"] { accent-color: var(--accent); padding: 0; border: 0; background: transparent; }
+input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
+label { font-size: .85rem; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+label.inline { flex-direction: row; align-items: center; gap: 8px; }
+
+/* Header */
+.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.tools { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Timeline (player-facing) */
+.board { border: 1px solid var(--line); border-radius: 16px; background: var(--surface); padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.board-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.turnpill {
+  font-family: var(--font-display); font-weight: 600; font-size: 1rem; letter-spacing: .04em;
+  color: var(--ally); background: color-mix(in srgb, var(--ally) 13%, transparent);
+  padding: 4px 14px; border-radius: 999px;
+}
+.turnpill.enemy { color: var(--enemy); background: color-mix(in srgb, var(--enemy) 13%, transparent); }
+.turnpill.cast { color: var(--cast); background: color-mix(in srgb, var(--cast) 13%, transparent); }
+.timeline { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; }
+.slot {
+  position: relative; background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px 6px 14px; min-height: 140px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  text-align: center; transition: border-color .15s, transform .25s;
+}
+.slot .when { font-family: var(--font-mono); font-size: .8rem; color: var(--muted); letter-spacing: .04em; min-height: 1.2em; }
+.slot .ico svg { width: 26px; height: 26px; display: block; }
+.slot .nm { font-family: var(--font-display); font-weight: 600; font-size: .98rem; line-height: 1.2; overflow-wrap: anywhere; }
+.slot .sub { font-size: .74rem; color: var(--muted); margin-top: -3px; }
+.slot.ally .ico { color: var(--ally); }
+.slot.enemy .ico { color: var(--enemy); }
+.slot.cast .ico { color: var(--cast); }
+.slot.now { border: 2px solid var(--accent); background: var(--accent-tint); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent); }
+.slot.now .when { color: var(--fg); font-family: var(--font-display); font-weight: 600; letter-spacing: .14em; }
+.slot.proj { opacity: .6; border-style: dashed; }
+.slot.sb { border-color: var(--gold); }
+.slot.sb.now { box-shadow: 0 0 0 4px color-mix(in srgb, var(--gold) 18%, transparent); }
+.gmmode .slot { cursor: pointer; }
+.gmmode .slot:hover { border-color: var(--muted); }
+.gmmode .slot.now:hover { border-color: var(--accent); }
+.slot.enter { animation: slotIn .35s ease-out both; }
+@keyframes slotIn { from { transform: translateY(6px); opacity: .4; } to { transform: none; } }
+
+.chip {
+  font-family: var(--font-display); font-weight: 700; font-size: .82rem; letter-spacing: .06em;
+  padding: 2px 10px; border-radius: 999px; white-space: nowrap;
+}
+.chip.red { color: var(--enemy); background: color-mix(in srgb, var(--enemy) 16%, transparent); }
+.chip.green { color: var(--ally); background: color-mix(in srgb, var(--ally) 16%, transparent); }
+.chip.blue { color: var(--blue); background: color-mix(in srgb, var(--blue) 16%, transparent); }
+.chip.gold { color: var(--gold); background: color-mix(in srgb, var(--gold) 16%, transparent); }
+.tag { font-family: var(--font-display); font-size: .66rem; font-weight: 700; letter-spacing: .14em; color: var(--gold); }
+.board-foot { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: .85rem; color: var(--muted); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend svg { width: 14px; height: 14px; }
+
+/* GM console */
+.console { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 18px; align-items: start; }
+.panel { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.acthead { display: flex; align-items: center; gap: 12px; }
+.acthead .ico svg { width: 34px; height: 34px; }
+.acthead .ico.ally { color: var(--ally); } .acthead .ico.enemy { color: var(--enemy); } .acthead .ico.cast { color: var(--cast); }
+.eyebrow { font-family: var(--font-display); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.bonusnote { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: .88rem; padding: 10px 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); }
+.actions { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+.actbtn {
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left;
+}
+.actbtn:hover { border-color: var(--accent); }
+.actbtn.on { border-color: var(--accent); background: var(--accent-tint); }
+.actbtn b { font-family: var(--font-display); font-weight: 600; font-size: .95rem; }
+.actbtn span { font-family: var(--font-mono); font-size: .76rem; color: var(--muted); }
+.actbtn.scraft b { color: var(--gold); }
+.form { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+.form label.grow { flex: 1 1 160px; }
+.form input[type="text"] { width: 100%; }
+.preview { font-size: .85rem; color: var(--muted); }
+.preview b { color: var(--fg); font-family: var(--font-mono); font-weight: 500; }
+
+.scroll-x { overflow-x: auto; margin-inline: -4px; padding-inline: 4px; }
+table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+th { text-align: left; font-family: var(--font-display); font-weight: 600; font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); padding: 0 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 8px 6px; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); vertical-align: middle; }
+tr.ko td { opacity: .45; }
+tr.ko td:last-child { opacity: 1; }
+tr.current td { background: var(--accent-tint); }
+td .nameinput { width: 9.5em; font-weight: 500; }
+.sideicon svg { width: 18px; height: 18px; display: block; }
+.sideicon.ally { color: var(--ally); } .sideicon.enemy { color: var(--enemy); }
+.status { white-space: nowrap; font-size: .84rem; }
+.status .castlbl { color: var(--cast); }
+.rowbtns { display: flex; gap: 4px; flex-wrap: nowrap; }
+.addrow { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; }
+.addrow label.grow { flex: 1 1 140px; }
+.addrow input[type="text"] { width: 100%; }
+
+.foot { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.settings { display: flex; flex-direction: column; gap: 14px; }
+.costs { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 340px; overflow-y: auto; font-size: .86rem; }
+.log li { display: flex; gap: 10px; align-items: baseline; padding-bottom: 6px; border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent); }
+.log .t { font-family: var(--font-mono); color: var(--muted); font-size: .76rem; min-width: 2.6em; }
+.log .chip { font-size: .68rem; padding: 0 7px; }
+.help { font-size: .86rem; color: var(--muted); max-width: 65ch; }
+.help p { margin: 0 0 6px; }
+
+/* Present (player) mode */
+.present-only { display: none; }
+body.present .gm { display: none !important; }
+body.present .present-only { display: flex; }
+body.present .app { max-width: none; }
+body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+body.present .slot { min-height: 190px; gap: 8px; }
+body.present .slot .ico svg { width: 38px; height: 38px; }
+body.present .slot .nm { font-size: 1.3rem; }
+body.present .slot .when { font-size: 1rem; }
+body.present .chip { font-size: 1rem; }
+body.present .turnpill { font-size: 1.3rem; }
+body.present h1 { font-size: 2rem; }
+
+@media (min-width: 900px) {
+  .timeline, body.present .timeline { grid-template-columns: repeat(var(--n, 10), minmax(0, 1fr)); }
+}
+@media (max-width: 860px) {
+  .console, .foot { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 480px) {
+  .timeline { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+  .slot { min-height: 124px; }
+  .board, .panel { padding: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .slot, .slot.enter { animation: none; transition: none; }
+}
+</style>
+
+<div class="app" id="app">
+  <header class="top">
+    <h1>AT Battle Timeline</h1>
+    <div class="tools gm">
+      <button class="btn" data-cmd="undo" id="undoBtn" title="Undo (Ctrl/Cmd+Z)">Undo</button>
+      <button class="btn" data-cmd="newbattle" title="Shuffle starting positions and reset the turn counter">New battle</button>
+      <button class="btn primary" data-cmd="present" title="Hide the GM controls for the table screen">Player view</button>
+    </div>
+    <div class="tools present-only">
+      <button class="btn" data-cmd="fullscreen">Fullscreen</button>
+      <button class="btn primary" data-cmd="present">Back to GM</button>
+    </div>
+  </header>
+
+  <section class="board" aria-label="Turn order">
+    <div class="board-head">
+      <h2>Turn order</h2>
+      <span class="turnpill" id="turnPill"></span>
+    </div>
+    <div class="timeline" id="timeline"></div>
+    <div class="board-foot">
+      <div class="legend" id="legend"></div>
+      <span class="gm">Click a slot to change its AT bonus. Dashed slots are projected turns.</span>
+    </div>
+  </section>
+
+  <div class="console gm">
+    <section class="panel" id="actPanel" aria-label="Current turn"></section>
+    <section class="panel" aria-label="Combatants">
+      <div class="panel-head">
+        <h3>Combatants</h3>
+        <label class="inline">Delay step <input type="number" id="set-step" min="1" max="50" data-set="step"></label>
+      </div>
+      <div class="scroll-x"><table id="roster"></table></div>
+      <form class="addrow" id="addForm">
+        <label class="grow">Name <input type="text" id="add-name" placeholder="e.g. Agate" autocomplete="off" required></label>
+        <label>Side
+          <select id="add-side"><option value="ally">Party</option><option value="enemy">Enemy</option></select>
+        </label>
+        <label>SPD <input type="number" id="add-spd" value="20" min="1" max="99"></label>
+        <label class="inline"><input type="checkbox" id="add-now"> Act next</label>
+        <button class="btn" type="submit">Add</button>
+      </form>
+    </section>
+  </div>
+
+  <div class="foot gm">
+    <section class="panel settings" aria-label="Settings">
+      <h3>Table settings</h3>
+      <label>Slots shown: <span class="num" id="showVal"></span>
+        <input type="range" id="set-show" min="6" max="14" step="1" data-set="show">
+      </label>
+      <label>AT bonus frequency: <span class="num" id="rateVal"></span>
+        <input type="range" id="set-rate" min="0" max="60" step="5" data-set="rate">
+      </label>
+      <label class="inline"><input type="checkbox" id="set-numbers" data-set="numbers"> Show AT numbers in player view</label>
+      <div><button class="btn small" data-cmd="reroll">Reroll upcoming bonuses</button></div>
+      <h3>Action delay (base, at SPD 20)</h3>
+      <div class="costs" id="costs"></div>
+      <div class="help">
+        <p>Delay on the timeline = base × 20 ÷ SPD, rounded. A faster unit gets its next turn sooner for the same action.</p>
+        <p>AT bonuses belong to timeline positions, not to people. Delaying or hastening a unit moves it onto a different bonus.</p>
+      </div>
+      <div><button class="btn small warn" data-cmd="reset">Load sample encounter</button></div>
+    </section>
+    <section class="panel" aria-label="Battle log">
+      <h3>Battle log</h3>
+      <ul class="log" id="log"></ul>
+    </section>
+  </div>
+</div>
+
+<datalist id="artsList">
+  <option value="Fire Bolt"><option value="Spark Arrow"><option value="Aqua Bleed"><option value="Stone Hammer">
+  <option value="Soul Blur"><option value="Tear"><option value="Teara"><option value="La Tear">
+  <option value="Earth Wall"><option value="Clock Up"><option value="Chrono Drive"><option value="Chrono Burst">
+  <option value="Air Strike"><option value="Holy Breath"><option value="Spiral Flare"><option value="Diamond Dust">
+</datalist>
+
+<script>
+(function () {
+  const KEY = 'atb-timeline-v1';
+  const ICON = {
+    shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3l7 3v5.2c0 4.4-2.9 7.9-7 9.8-4.1-1.9-7-5.4-7-9.8V6z"/></svg>',
+    swords: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h4l9 9M4 4v4l9 9M20 4h-4l-9 9M20 4v4l-9 9M15 15l-2 2M9 15l2 2M16.5 17.5L19.5 20.5M7.5 17.5L4.5 20.5"/></svg>',
+    flame: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3c.8 3 5 5.2 5 10a5 5 0 0 1-10 0c0-2.6 1.4-4.2 2.6-5.2.2 1.9 1.2 3 2.4 3.2-1-3 .2-5.8 0-8z"/></svg>',
+    star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6-4.5-4.2 6.1-.7z"/></svg>'
+  };
+  const BONUS = {
+    crit: { label: 'CRIT', cls: 'red', desc: 'Critical: damage or healing this turn ×1.5', w: 3 },
+    hp10: { label: 'HEAL 10%', cls: 'green', desc: 'Restore 10% max HP at the start of the turn', w: 3 },
+    hp50: { label: 'HEAL 50%', cls: 'green', desc: 'Restore 50% max HP at the start of the turn', w: 1 },
+    ep10: { label: 'EP 10%', cls: 'blue', desc: 'Restore 10% max EP at the start of the turn', w: 2 },
+    ep50: { label: 'EP 50%', cls: 'blue', desc: 'Restore 50% max EP at the start of the turn', w: 1 },
+    cp20: { label: 'CP +20', cls: 'gold', desc: 'Gain 20 CP at the start of the turn', w: 2 },
+    cp50: { label: 'CP +50', cls: 'gold', desc: 'Gain 50 CP at the start of the turn', w: 1 }
+  };
+  const BONUS_KEYS = Object.keys(BONUS);
+  const COST_LABELS = { attack: 'Attack', craft: 'Craft', castTime: 'Arts cast', afterCast: 'Arts after-cast', item: 'Item', move: 'Move', defend: 'Defend', scraft: 'S-Craft' };
+  const DEF_COSTS = { attack: 10, craft: 12, castTime: 6, afterCast: 8, item: 8, move: 6, defend: 8, scraft: 16 };
+
+  function sample() {
+    const units = [
+      { id: 'u1', name: 'Estelle', side: 'ally', spd: 22 },
+      { id: 'u2', name: 'Goblin', side: 'enemy', spd: 18 },
+      { id: 'u3', name: 'Joshua', side: 'ally', spd: 26 },
+      { id: 'u4', name: 'Kloe', side: 'ally', spd: 20 },
+      { id: 'u5', name: 'Schera', side: 'ally', spd: 20 },
+      { id: 'u6', name: 'Knight', side: 'enemy', spd: 16 }
+    ];
+    const ticks = [0, 3, 5, 7, 9, 11];
+    const entries = units.map((u, i) => ({ unitId: u.id, tick: ticks[i], seq: i + 1, kind: 'turn' }));
+    Object.assign(entries[3], { kind: 'cast', art: 'Fire Bolt', after: 8 });
+    return {
+      units, entries, now: 0, slot: 0, seqN: 10, idN: 7, seed: 20261015,
+      overrides: { 0: 'none', 1: 'crit', 2: 'none', 3: 'none', 4: 'hp10', 5: 'none' },
+      costs: Object.assign({}, DEF_COSTS),
+      settings: { show: 10, rate: 30, numbers: false, step: 3 },
+      log: [{ t: 0, text: 'Sample encounter loaded. Edit the roster or press New battle.' }]
+    };
+  }
+
+  let S, undoStack = [], pending = null, lastFront = null;
+  try { const raw = localStorage.getItem(KEY); if (raw) S = JSON.parse(raw); } catch (e) {}
+  if (!S || !Array.isArray(S.units)) S = sample();
+  S.costs = Object.assign({}, DEF_COSTS, S.costs);
+
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+  function snapshot() { undoStack.push(JSON.stringify(S)); if (undoStack.length > 80) undoStack.shift(); }
+  function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+  const U = id => S.units.find(u => u.id === id);
+  const E = id => S.entries.find(e => e.unitId === id);
+  const delay = (base, spd) => Math.max(1, Math.round(Number(base) * 20 / Math.max(1, Number(spd) || 1)));
+  const cmp = (a, b) => a.tick - b.tick || a.seq - b.seq;
+  function queue() { return S.entries.filter(e => { const u = U(e.unitId); return u && !u.ko; }).sort(cmp); }
+
+  function hash(a, b) {
+    let h = Math.imul(a ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(b + 0x632be5ab, 0xc2b2ae35);
+    h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 12; h = Math.imul(h, 0x297a2d39); h ^= h >>> 15;
+    return (h >>> 0) / 4294967296;
+  }
+  function bonusAt(slot) {
+    if (Object.prototype.hasOwnProperty.call(S.overrides, slot)) return S.overrides[slot];
+    if (hash(S.seed, slot * 2 + 1) >= S.settings.rate / 100) return 'none';
+    const total = BONUS_KEYS.reduce((t, k) => t + BONUS[k].w, 0);
+    let r = hash(S.seed, slot * 2 + 2) * total;
+    for (const k of BONUS_KEYS) { r -= BONUS[k].w; if (r < 0) return k; }
+    return 'crit';
+  }
+
+  function project(n) {
+    const live = queue().map(e => Object.assign({}, e));
+    const out = []; let g = 0;
+    while (out.length < n && live.length && g++ < 300) {
+      live.sort(cmp);
+      const e = live.shift(); out.push(e);
+      const u = U(e.unitId);
+      const base = e.kind === 'cast' ? (e.after ?? S.costs.afterCast) : S.costs.attack;
+      live.push({ unitId: e.unitId, tick: e.tick + delay(base, u.spd), seq: 1e6 + g, kind: 'turn', projected: true });
+    }
+    return out;
+  }
+
+  function addLog(text, bonus) { S.log.push({ t: S.slot + 1, text, bonus: bonus && bonus !== 'none' ? bonus : null }); if (S.log.length > 200) S.log.shift(); }
+
+  /* ---------- actions ---------- */
+  function act(kind, o) {
+    o = o || {};
+    const cur = queue()[0]; if (!cur) return;
+    snapshot();
+    const u = U(cur.unitId), b = bonusAt(S.slot);
+    S.now = cur.tick;
+    let base, text;
+    if (cur.kind === 'cast') {
+      base = cur.after ?? S.costs.afterCast;
+      text = `${u.name}'s ${cur.art} resolves`;
+      cur.kind = 'turn'; delete cur.art; delete cur.after;
+    } else if (kind === 'arts') {
+      base = o.base; cur.kind = 'cast'; cur.art = o.name || 'Arts'; cur.after = o.after;
+      text = `${u.name} begins casting ${cur.art}`;
+    } else {
+      base = o.base ?? S.costs[kind];
+      const names = { attack: 'Attack', item: 'Item', move: 'Move', defend: 'Defend' };
+      if (kind === 'craft') text = `${u.name} uses ${o.name || 'a craft'}`;
+      else if (kind === 'scraft') text = `${u.name} unleashes ${o.name || 'an S-Craft'}`;
+      else if (kind === 'custom') text = `${u.name}: ${o.name || 'custom action'}`;
+      else text = `${u.name}: ${names[kind]}`;
+    }
+    const d = delay(base, u.spd);
+    cur.tick = S.now + d; cur.seq = ++S.seqN; cur.sbreak = false;
+    addLog(`${text} (+${d})`, b);
+    S.slot++;
+    pending = null;
+    commit();
+  }
+
+  function rosterCmd(cmd, id) {
+    const u = U(id), e = E(id); if (!u || !e) return;
+    const q = queue(), front = q[0];
+    const step = Number(S.settings.step) || 1;
+    snapshot();
+    if (cmd === 'delay') {
+      e.tick += step; e.seq = ++S.seqN; addLog(`${u.name} delayed +${step}`);
+    } else if (cmd === 'hasten') {
+      if (front && e !== front) {
+        let t = e.tick - step;
+        if (t <= front.tick) { t = front.tick; e.seq = front.seq + 0.001; }
+        e.tick = t;
+      }
+      addLog(`${u.name} hastened −${step}`);
+    } else if (cmd === 'sbreak') {
+      if (front) { e.tick = front.tick; e.seq = front.seq - 0.001; }
+      if (e.kind === 'cast') { addLog(`${u.name} drops ${e.art}`); }
+      e.kind = 'turn'; delete e.art; delete e.after; e.sbreak = true;
+      addLog(`${u.name} S-Breaks and takes the current turn`);
+      pending = { kind: 'scraft', name: '', base: S.costs.scraft };
+    } else if (cmd === 'impede') {
+      if (e.kind === 'cast') { addLog(`${u.name}'s ${e.art} is impeded`); e.kind = 'turn'; delete e.art; delete e.after; }
+    } else if (cmd === 'ko') {
+      u.ko = !u.ko;
+      if (!u.ko) {
+        const nf = queue().filter(x => x !== e)[0];
+        const base = nf ? nf.tick : S.now;
+        if (e.tick < base) { e.tick = base + delay(S.costs.attack, u.spd); e.seq = ++S.seqN; }
+        e.kind = 'turn'; delete e.art; e.sbreak = false;
+      }
+      addLog(u.ko ? `${u.name} is knocked out` : `${u.name} is back in the fight`);
+    } else if (cmd === 'remove') {
+      S.units = S.units.filter(x => x.id !== id); S.entries = S.entries.filter(x => x.unitId !== id);
+      addLog(`${u.name} removed`);
+    }
+    commit();
+  }
+
+  function newBattle() {
+    snapshot();
+    S.now = 0; S.slot = 0; S.seed = (Math.random() * 2 ** 31) | 0; S.overrides = {};
+    S.units.forEach(u => { u.ko = false; });
+    S.entries.forEach(e => {
+      const u = U(e.unitId);
+      e.tick = Math.round(delay(S.costs.attack, u.spd) * Math.random());
+      e.seq = ++S.seqN; e.kind = 'turn'; delete e.art; delete e.after; e.sbreak = false;
+    });
+    S.log = []; addLog('New battle. Starting positions shuffled by SPD.');
+    pending = null; commit();
+  }
+
+  function commit() { save(); render(); }
+
+  /* ---------- render ---------- */
+  function iconFor(e, u) { return e.kind === 'cast' ? ICON.flame : (u.side === 'ally' ? ICON.shield : ICON.swords); }
+
+  function renderTimeline() {
+    const present = document.body.classList.contains('present');
+    const showNums = !present || S.settings.numbers;
+    const list = project(Number(S.settings.show));
+    const tl = document.getElementById('timeline');
+    const pill = document.getElementById('turnPill');
+    document.querySelector('.board').classList.toggle('gmmode', !present);
+    if (!list.length) {
+      tl.innerHTML = '<p class="muted" style="grid-column:1/-1">No one is in the fight yet. Add combatants in the GM panel.</p>';
+      pill.textContent = ''; pill.hidden = true; return;
+    }
+    tl.style.setProperty('--n', list.length);
+    const front = list[0];
+    const frontKey = front.unitId + ':' + front.seq;
+    const moved = frontKey !== lastFront; lastFront = frontKey;
+    tl.innerHTML = list.map((e, i) => {
+      const u = U(e.unitId), slot = S.slot + i, b = bonusAt(slot), cast = e.kind === 'cast';
+      const cls = ['slot', u.side, cast ? 'cast' : '', i === 0 ? 'now' : '', e.projected ? 'proj' : '', e.sbreak ? 'sb' : '', moved ? 'enter' : ''].join(' ');
+      const when = i === 0 ? 'NOW' : (showNums ? '+' + (e.tick - front.tick) : '');
+      const title = present ? '' : ` title="Slot ${slot + 1}. Click to change bonus"`;
+      return `<div class="${cls}" data-slot="${slot}" style="animation-delay:${i * 25}ms"${present ? '' : ' tabindex="0" role="button"'}${title}>
+        <span class="when">${when || '&nbsp;'}</span>
+        <span class="ico">${iconFor(e, u)}</span>
+        <span class="nm">${esc(cast ? e.art : u.name)}</span>
+        ${cast ? `<span class="sub">${esc(u.name)} casting</span>` : ''}
+        ${e.sbreak ? '<span class="tag">S-BREAK</span>' : ''}
+        ${b !== 'none' ? `<span class="chip ${BONUS[b].cls}">${BONUS[b].label}</span>` : ''}
+      </div>`;
+    }).join('');
+    const fu = U(front.unitId);
+    pill.hidden = false;
+    pill.className = 'turnpill ' + (front.kind === 'cast' ? 'cast' : fu.side);
+    pill.textContent = front.kind === 'cast' ? `${front.art} resolves` : `${fu.name}'s turn`;
+    document.getElementById('legend').innerHTML =
+      `<span style="color:var(--ally)">${ICON.shield}<span class="muted">Party</span></span>` +
+      `<span style="color:var(--enemy)">${ICON.swords}<span class="muted">Enemy</span></span>` +
+      `<span style="color:var(--cast)">${ICON.flame}<span class="muted">Arts resolving</span></span>`;
+  }
+
+  function costBtn(kind, label, u, extra) {
+    const on = pending && pending.kind === kind ? ' on' : '';
+    return `<button class="actbtn${on}${kind === 'scraft' ? ' scraft' : ''}" data-act="${kind}"><b>${label}${extra || ''}</b><span>+${delay(S.costs[kind === 'arts' ? 'castTime' : kind] ?? 10, u.spd)}</span></button>`;
+  }
+
+  function landing(base, u, cur) {
+    const t = S.now <= cur.tick ? cur.tick + delay(base, u.spd) : 0;
+    const others = queue().filter(e => e !== cur);
+    const pos = others.filter(e => e.tick <= t).length + 1;
+    return `<p class="preview">Next turn lands at <b>+${delay(base, u.spd)}</b>, position <b>${pos}</b> in line.</p>`;
+  }
+
+  function renderAct() {
+    const el = document.getElementById('actPanel');
+    const cur = queue()[0];
+    if (!cur) { el.innerHTML = '<h3>Current turn</h3><p class="muted">No active combatants. Add some to start.</p>'; return; }
+    const u = U(cur.unitId), b = bonusAt(S.slot), cast = cur.kind === 'cast';
+    const icoCls = cast ? 'cast' : u.side;
+    let h = `<div class="panel-head"><h3>Current turn · ${S.slot + 1}</h3></div>
+      <div class="acthead"><span class="ico ${icoCls}">${iconFor(cur, u)}</span>
+        <div><div class="eyebrow">${u.side === 'ally' ? 'Party' : 'Enemy'} · SPD <span class="num">${u.spd}</span>${cur.sbreak ? ' · S-Break' : ''}</div>
+        <h2>${esc(cast ? cur.art : u.name)}${cast ? ` <span class="muted" style="font-size:.9rem">(${esc(u.name)})</span>` : ''}</h2></div></div>`;
+    if (b !== 'none') h += `<div class="bonusnote"><span class="chip ${BONUS[b].cls}">${BONUS[b].label}</span><span>${BONUS[b].desc}</span></div>`;
+    if (cast) {
+      const after = cur.after ?? S.costs.afterCast;
+      h += `<p class="muted" style="margin:0">Resolve the art at the table, then ${esc(u.name)} recovers.</p>
+        <div class="tools"><button class="btn primary" data-act="resolve">Resolve ${esc(cur.art)}</button>
+        <button class="btn warn" data-r="impede" data-id="${u.id}">Impede</button></div>${landing(after, u, cur)}`;
+    } else {
+      h += `<div class="actions">
+        ${costBtn('attack', 'Attack', u)}${costBtn('craft', 'Craft', u, '…')}${costBtn('arts', 'Arts', u, '…')}
+        ${costBtn('item', 'Item', u)}${costBtn('move', 'Move', u)}${costBtn('defend', 'Defend', u)}
+        ${costBtn('scraft', 'S-Craft', u, '…')}
+        <button class="actbtn${pending && pending.kind === 'custom' ? ' on' : ''}" data-act="custom"><b>Custom…</b><span>any delay</span></button>
+      </div>`;
+      if (pending) {
+        const p = pending;
+        const nameLbl = { craft: 'Craft name', arts: 'Art name', scraft: 'S-Craft name', custom: 'Action' }[p.kind];
+        h += `<form class="form" id="pendForm">
+          <label class="grow">${nameLbl}<input type="text" id="f-name" value="${esc(p.name || '')}" ${p.kind === 'arts' ? 'list="artsList"' : ''} autocomplete="off"></label>
+          <label>${p.kind === 'arts' ? 'Cast time' : 'Delay'}<input type="number" id="f-base" min="0" max="99" value="${p.base}"></label>
+          ${p.kind === 'arts' ? `<label>After-cast<input type="number" id="f-after" min="0" max="99" value="${p.after}"></label>` : ''}
+          <button class="btn primary" type="submit">${p.kind === 'arts' ? 'Start casting' : 'Confirm'}</button>
+          <button class="btn ghost" type="button" data-act="cancel">Cancel</button>
+        </form>${landing(p.base, u, cur)}`;
+      }
+    }
+    el.innerHTML = h;
+    const nm = document.getElementById('f-name'); if (nm && !nm.value) nm.focus();
+  }
+
+  function renderRoster() {
+    const q = queue(), front = q[0];
+    const order = new Map(q.map((e, i) => [e.unitId, i]));
+    const rows = S.units.slice().sort((a, b) => {
+      const ai = order.has(a.id) ? order.get(a.id) : 999, bi = order.has(b.id) ? order.get(b.id) : 999;
+      return ai - bi;
+    }).map(u => {
+      const e = E(u.id);
+      const isCur = front && front.unitId === u.id;
+      let status;
+      if (u.ko) status = '<span class="muted">KO</span>';
+      else if (isCur) status = '<b>Acting</b>';
+      else status = `<span class="num">+${e.tick - front.tick}</span>`;
+      if (!u.ko && e.kind === 'cast') status += ` <span class="castlbl">· ${esc(e.art)}</span>`;
+      return `<tr class="${u.ko ? 'ko' : ''} ${isCur ? 'current' : ''}">
+        <td><span class="sideicon ${u.side}" title="${u.side === 'ally' ? 'Party' : 'Enemy'}">${u.side === 'ally' ? ICON.shield : ICON.swords}</span></td>
+        <td><input class="nameinput" type="text" id="name-${u.id}" value="${esc(u.name)}" data-uf="name" data-id="${u.id}" aria-label="Name"></td>
+        <td><input type="number" id="spd-${u.id}" value="${u.spd}" min="1" max="99" data-uf="spd" data-id="${u.id}" aria-label="SPD"></td>
+        <td class="status">${status}</td>
+        <td><div class="rowbtns">
+          <button class="btn small" data-r="hasten" data-id="${u.id}" title="Hasten by the delay step" ${u.ko || isCur ? 'disabled' : ''}>−</button>
+          <button class="btn small" data-r="delay" data-id="${u.id}" title="Delay by the delay step" ${u.ko ? 'disabled' : ''}>+</button>
+          <button class="btn small gold" data-r="sbreak" data-id="${u.id}" title="S-Break: take the current turn now" ${u.ko ? 'disabled' : ''}>S-Break</button>
+          ${e.kind === 'cast' && !u.ko ? `<button class="btn small" data-r="impede" data-id="${u.id}" title="Cancel the art being cast">Impede</button>` : ''}
+          <button class="btn small" data-r="ko" data-id="${u.id}">${u.ko ? 'Revive' : 'KO'}</button>
+          <button class="btn small warn" data-r="remove" data-id="${u.id}" title="Remove from battle" aria-label="Remove ${esc(u.name)}">✕</button>
+        </div></td></tr>`;
+    }).join('');
+    document.getElementById('roster').innerHTML =
+      `<thead><tr><th></th><th>Name</th><th>SPD</th><th>Next</th><th>Controls</th></tr></thead><tbody>${rows ||
+      '<tr><td colspan="5" class="muted">No combatants yet.</td></tr>'}</tbody>`;
+  }
+
+  function renderSettings() {
+    const st = S.settings;
+    document.getElementById('set-show').value = st.show;
+    document.getElementById('showVal').textContent = st.show;
+    document.getElementById('set-rate').value = st.rate;
+    document.getElementById('rateVal').textContent = st.rate + '%';
+    document.getElementById('set-numbers').checked = !!st.numbers;
+    document.getElementById('set-step').value = st.step;
+    document.getElementById('costs').innerHTML = Object.keys(COST_LABELS).map(k =>
+      `<label>${COST_LABELS[k]}<input type="number" id="cost-${k}" min="0" max="99" value="${S.costs[k]}" data-cost="${k}"></label>`).join('');
+    document.getElementById('undoBtn').disabled = !undoStack.length;
+  }
+
+  function renderLog() {
+    document.getElementById('log').innerHTML = S.log.slice(-60).reverse().map(l =>
+      `<li><span class="t">${l.t ? '#' + l.t : ''}</span><span>${esc(l.text)}</span>${l.bonus && BONUS[l.bonus] ? `<span class="chip ${BONUS[l.bonus].cls}">${BONUS[l.bonus].label}</span>` : ''}</li>`).join('');
+  }
+
+  function render() { renderTimeline(); renderAct(); renderRoster(); renderSettings(); renderLog(); }
+
+  /* ---------- events ---------- */
+  document.addEventListener('click', ev => {
+    const t = ev.target.closest('[data-act],[data-r],[data-cmd],.slot');
+    if (!t) return;
+    if (t.dataset.act) {
+      const k = t.dataset.act;
+      if (k === 'resolve') return act('resolve');
+      if (k === 'cancel') { pending = null; return renderAct(); }
+      if (k === 'craft') { pending = { kind: 'craft', name: '', base: S.costs.craft }; return renderAct(); }
+      if (k === 'arts') { pending = { kind: 'arts', name: '', base: S.costs.castTime, after: S.costs.afterCast }; return renderAct(); }
+      if (k === 'scraft') { pending = { kind: 'scraft', name: '', base: S.costs.scraft }; return renderAct(); }
+      if (k === 'custom') { pending = { kind: 'custom', name: '', base: S.costs.attack }; return renderAct(); }
+      return act(k);
+    }
+    if (t.dataset.r) return rosterCmd(t.dataset.r, t.dataset.id);
+    if (t.dataset.cmd) {
+      const c = t.dataset.cmd;
+      if (c === 'undo') return undo();
+      if (c === 'newbattle') return newBattle();
+      if (c === 'present') { document.body.classList.toggle('present'); lastFront = null; return renderTimeline(); }
+      if (c === 'fullscreen') {
+        try { const p = document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+        return;
+      }
+      if (c === 'reroll') { snapshot(); S.seed = (Math.random() * 2 ** 31) | 0; const keep = {}; S.overrides = keep; addLog('Upcoming AT bonuses rerolled'); return commit(); }
+      if (c === 'reset') { snapshot(); S = sample(); pending = null; return commit(); }
+    }
+    if (t.classList.contains('slot') && !document.body.classList.contains('present')) cycleBonus(Number(t.dataset.slot));
+  });
+  document.addEventListener('keydown', ev => {
+    const inField = /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName);
+    if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 'z' && !inField) { ev.preventDefault(); undo(); }
+    if ((ev.key === 'Enter' || ev.key === ' ') && document.activeElement.classList.contains('slot')) { ev.preventDefault(); cycleBonus(Number(document.activeElement.dataset.slot)); }
+  });
+
+  function cycleBonus(slot) {
+    snapshot();
+    const order = ['none'].concat(BONUS_KEYS);
+    const cur = bonusAt(slot);
+    S.overrides[slot] = order[(order.indexOf(cur) + 1) % order.length];
+    lastFront = lastFront; commit();
+    const el = document.querySelector(`.slot[data-slot="${slot}"]`); if (el) el.focus();
+  }
+
+  function undo() {
+    if (!undoStack.length) return;
+    S = JSON.parse(undoStack.pop()); pending = null; save(); render();
+  }
+
+  document.addEventListener('submit', ev => {
+    ev.preventDefault();
+    if (ev.target.id === 'pendForm' && pending) {
+      const name = document.getElementById('f-name').value.trim();
+      const base = Math.max(0, Number(document.getElementById('f-base').value) || 0);
+      const afterEl = document.getElementById('f-after');
+      act(pending.kind, { name, base, after: afterEl ? Math.max(0, Number(afterEl.value) || 0) : undefined });
+    } else if (ev.target.id === 'addForm') {
+      const name = document.getElementById('add-name').value.trim(); if (!name) return;
+      const side = document.getElementById('add-side').value;
+      const spd = Math.max(1, Number(document.getElementById('add-spd').value) || 20);
+      const now = document.getElementById('add-now').checked;
+      snapshot();
+      const id = 'u' + (S.idN++);
+      S.units.push({ id, name, side, spd });
+      const front = queue()[0];
+      const e = { unitId: id, kind: 'turn', seq: ++S.seqN };
+      if (front && now) { e.tick = front.tick; e.seq = front.seq + 0.001; }
+      else e.tick = (front ? front.tick : S.now) + delay(S.costs.attack, spd);
+      S.entries.push(e);
+      addLog(`${name} joins the battle`);
+      document.getElementById('add-name').value = '';
+      commit();
+    }
+  });
+
+  document.addEventListener('input', ev => {
+    const t = ev.target;
+    if (t.id === 'f-base' || t.id === 'f-name' || t.id === 'f-after') {
+      if (!pending) return;
+      if (t.id === 'f-name') pending.name = t.value;
+      if (t.id === 'f-base') { pending.base = Math.max(0, Number(t.value) || 0); updatePreview(); }
+      if (t.id === 'f-after') pending.after = Math.max(0, Number(t.value) || 0);
+    }
+    if (t.dataset.set === 'show' || t.dataset.set === 'rate') {
+      S.settings[t.dataset.set] = Number(t.value); save(); renderTimeline(); renderAct(); renderSettings();
+    }
+  });
+  function updatePreview() {
+    const cur = queue()[0]; const pv = document.querySelector('#actPanel .preview');
+    if (cur && pv && pending) pv.outerHTML = landing(pending.base, U(cur.unitId), cur);
+  }
+
+  document.addEventListener('change', ev => {
+    const t = ev.target;
+    if (t.dataset.uf) {
+      const u = U(t.dataset.id); if (!u) return;
+      snapshot();
+      if (t.dataset.uf === 'name') { const v = t.value.trim(); if (v) u.name = v; }
+      if (t.dataset.uf === 'spd') u.spd = Math.max(1, Math.min(99, Number(t.value) || u.spd));
+      commit();
+    } else if (t.dataset.set === 'numbers') { S.settings.numbers = t.checked; save(); renderTimeline(); }
+    else if (t.dataset.set === 'step') { S.settings.step = Math.max(1, Number(t.value) || 1); save(); }
+    else if (t.dataset.cost) { snapshot(); S.costs[t.dataset.cost] = Math.max(0, Number(t.value) || 0); commit(); }
+  });
+
+  render();
+})();
+</script>
+</body></html>
