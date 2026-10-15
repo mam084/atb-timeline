@@ -214,6 +214,38 @@ td .nameinput { width: 9.5em; font-weight: 500; }
 .plog .log { max-height: none; font-size: 1rem; }
 .notice { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 24px; text-align: center; color: var(--muted); }
 
+/* Tracker tabs */
+.titlebar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.tabs { display: inline-flex; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.tabs button { background: transparent; border: 0; border-radius: 7px; padding: 5px 12px; font-family: var(--font-display); font-weight: 600; font-size: .86rem; color: var(--muted); }
+.tabs button:hover { color: var(--fg); }
+.tabs button[aria-selected="true"] { background: var(--surface-2); color: var(--fg); box-shadow: inset 0 0 0 1px var(--line); }
+body:not(.mode-dnd) .dnd-only { display: none !important; }
+body.mode-dnd .atb-only { display: none !important; }
+.player-only { display: none; }
+body.player .player-only { display: flex; }
+
+/* Initiative */
+.icard .when { font-size: 1.3rem; color: var(--fg); font-weight: 500; }
+.icard.now .when { font-family: var(--font-mono); letter-spacing: .02em; }
+.slot.next { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+.slot.down .ico, .slot.down .nm { opacity: .45; }
+.slot.hiddenc { border-style: dashed; }
+.tags { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.tag.you { color: var(--blue); }
+.tag.nx { color: var(--accent); }
+.tag.dn { color: var(--enemy); }
+.tag.hid { color: var(--muted); }
+.waiting { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: .88rem; color: var(--muted); }
+.waiting .chip { color: var(--fg); background: var(--surface-2); font-weight: 600; letter-spacing: .02em; }
+.turnbig { font-family: var(--font-display); font-size: 1.5rem; font-weight: 600; line-height: 1.2; }
+.btn.big { padding: 11px 18px; font-size: 1rem; }
+.me { border: 1px solid var(--accent); border-radius: 14px; background: var(--surface); padding: 16px 18px; flex-direction: column; gap: 12px; }
+.me.myturn { background: var(--accent-tint); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 15%, transparent); }
+.me .big { font-family: var(--font-display); font-size: 1.35rem; font-weight: 600; }
+.me input[type="number"] { width: 6em; font-size: 1.05rem; }
+.me input[type="text"] { width: 12em; max-width: 100%; }
+
 /* Present (GM screen) and player (phone) modes */
 .present-only { display: none; }
 body.present .gm { display: none !important; }
@@ -251,11 +283,17 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
 
 <div class="app" id="app">
   <header class="top">
-    <h1>AT Battle Timeline</h1>
+    <div class="titlebar">
+      <h1 id="appTitle">AT Battle Timeline</h1>
+      <div class="tabs gm" role="tablist" aria-label="Tracker">
+        <button role="tab" data-cmd="mode" data-mode="atb" id="tab-atb">ATB</button>
+        <button role="tab" data-cmd="mode" data-mode="dnd" id="tab-dnd">Initiative</button>
+      </div>
+    </div>
     <div class="tools gm">
       <span class="livebadge" id="gmLive" hidden></span>
       <button class="btn" data-cmd="undo" id="undoBtn" title="Undo (Ctrl/Cmd+Z)">Undo</button>
-      <button class="btn" data-cmd="newbattle" title="Shuffle starting positions and reset the turn counter">New battle</button>
+      <button class="btn atb-only" data-cmd="newbattle" title="Shuffle starting positions and reset the turn counter">New battle</button>
       <button class="btn primary" data-cmd="present" title="Hide the GM controls for the table screen">Player view</button>
     </div>
     <div class="tools present-only">
@@ -267,7 +305,18 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
 
   <div class="notice" id="notice" hidden></div>
 
-  <section class="board" id="board" aria-label="Turn order">
+  <section class="me player-only dnd-only" id="mePanel" aria-label="Your character"></section>
+
+  <section class="board dnd-only" id="dboard" aria-label="Initiative order">
+    <div class="board-head">
+      <h2>Initiative order</h2>
+      <span class="turnpill" id="dPill"></span>
+    </div>
+    <div class="timeline" id="dtimeline"></div>
+    <div class="waiting" id="dWaiting" hidden></div>
+  </section>
+
+  <section class="board atb-only" id="board" aria-label="Turn order">
     <div class="board-head">
       <h2>Turn order</h2>
       <span class="turnpill" id="turnPill"></span>
@@ -285,7 +334,32 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     <ul class="log" id="plog"></ul>
   </section>
 
-  <div class="console gm">
+  <div class="console gm dnd-only">
+    <section class="panel" id="dActPanel" aria-label="Combat"></section>
+    <section class="panel" aria-label="Initiative combatants">
+      <div class="panel-head">
+        <h3>Combatants</h3>
+        <div class="tools">
+          <button class="btn small" data-cmd="drollall" title="Roll d20 + bonus for every monster without initiative">Roll for monsters</button>
+          <button class="btn small warn" data-cmd="dnewenc" title="Remove monsters and clear everyone's initiative">New encounter</button>
+        </div>
+      </div>
+      <div class="scroll-x"><table id="droster"></table></div>
+      <form class="addrow" id="dAddForm">
+        <label class="grow">Name <input type="text" id="dadd-name" placeholder="e.g. Goblin" autocomplete="off" required></label>
+        <label>Side
+          <select id="dadd-side"><option value="npc">Monster / NPC</option><option value="pc">Player character</option></select>
+        </label>
+        <label>Init bonus <input type="number" id="dadd-bonus" value="0"></label>
+        <label>Initiative <input type="number" id="dadd-init" step="any" placeholder="roll"></label>
+        <label>How many <input type="number" id="dadd-count" value="1" min="1" max="20"></label>
+        <button class="btn" type="submit">Add</button>
+      </form>
+      <p class="help">Leave Initiative empty and monsters roll d20 + bonus automatically. Players can send their own from their phones. Ties go to the higher bonus; type a decimal like 15.5 to place someone by hand.</p>
+    </section>
+  </div>
+
+  <div class="console gm atb-only">
     <section class="panel" id="actPanel" aria-label="Current turn"></section>
     <section class="panel" aria-label="Combatants">
       <div class="panel-head">
@@ -308,7 +382,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
   <div class="foot gm">
     <div class="stack">
       <section class="panel share" id="sharePanel" aria-label="Players' phones"></section>
-      <section class="panel settings" aria-label="Settings">
+      <section class="panel settings atb-only" aria-label="Settings">
         <h3>Delay modifier</h3>
         <div class="row">
           <label>How it applies
@@ -430,6 +504,9 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
   }
 
   let S = null, undoStack = [], lastFront = null;
+  const DKEY = 'atb-dnd-v1', MKEY = 'atb-mode';
+  let D = null, dUndo = [], MODE = 'atb', myUid = null, authFailed = false;
+  const $ = id => document.getElementById(id);
   if (!PLAYER) {
     try { const raw = localStorage.getItem(KEY); if (raw) S = JSON.parse(raw); } catch (e) {}
     S = normalize(S);
@@ -770,9 +847,282 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
   }
 
   function render() {
+    document.body.classList.toggle('mode-dnd', MODE === 'dnd');
+    $('appTitle').textContent = MODE === 'dnd' ? 'Initiative Tracker' : 'AT Battle Timeline';
+    ['atb', 'dnd'].forEach(m => { const t = $('tab-' + m); if (t) t.setAttribute('aria-selected', String(MODE === m)); });
+    if (MODE === 'dnd') {
+      if (!D) return;
+      renderDBoard(); renderDLog();
+      if (PLAYER) renderMe();
+      else { renderDAct(); renderDRoster(); renderShare(); $('undoBtn').disabled = !dUndo.length; }
+      return;
+    }
     if (!S) return;
     renderTimeline(); renderLog();
     if (!PLAYER) { renderAct(); renderRoster(); renderSettings(); renderShare(); }
+  }
+
+  /* ================= D&D initiative ================= */
+  const PERSON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20.5c.8-3.8 3.6-6 7-6s6.2 2.2 7 6"/></svg>';
+  function dSample() {
+    return {
+      started: false, round: 1, currentId: null, idN: 7, showInit: true,
+      cs: [
+        { id: 'd1', name: 'Kira', side: 'pc', init: 18, bonus: 3 },
+        { id: 'd2', name: 'Bram', side: 'pc', init: null, bonus: 1 },
+        { id: 'd3', name: 'Goblin Boss', side: 'npc', init: 15, bonus: 2 },
+        { id: 'd4', name: 'Goblin A', side: 'npc', init: 12, bonus: 2 },
+        { id: 'd5', name: 'Dire Wolf', side: 'npc', init: 12, bonus: 2, hidden: true },
+        { id: 'd6', name: 'Liora', side: 'pc', init: 9, bonus: -1 }
+      ],
+      log: [{ t: 0, text: 'Sample initiative loaded. Press New encounter to clear the monsters and start your own.' }]
+    };
+  }
+  function normalizeD(d) {
+    if (!d || !Array.isArray(d.cs)) return dSample();
+    d.log = d.log || []; d.round = d.round || 1;
+    d.idN = d.idN || d.cs.length + 1;
+    if (d.showInit === undefined) d.showInit = true;
+    return d;
+  }
+  if (!PLAYER) {
+    try { D = JSON.parse(localStorage.getItem(DKEY)); } catch (e) {}
+    D = normalizeD(D);
+    try { MODE = localStorage.getItem(MKEY) === 'dnd' ? 'dnd' : 'atb'; } catch (e) {}
+  }
+  function dSave() { if (PLAYER) return; try { localStorage.setItem(DKEY, JSON.stringify(D)); } catch (e) {} Sync.push(); }
+  function dSnap() { dUndo.push(JSON.stringify(D)); if (dUndo.length > 80) dUndo.shift(); }
+  function dCommit() { dSave(); render(); }
+  const C = id => D.cs.find(c => c.id === id);
+  const hasInit = c => c.init !== null && c.init !== undefined && c.init !== '' && isFinite(c.init);
+  const fmtInit = n => String(Math.round(Number(n) * 10) / 10);
+  function dOrder(forPlayers) {
+    return D.cs.filter(c => hasInit(c) && !(forPlayers && c.hidden))
+      .sort((a, b) => b.init - a.init || (b.bonus || 0) - (a.bonus || 0) || a.name.localeCompare(b.name));
+  }
+  function dlog(text, gm) { D.log.push({ t: D.started ? D.round : 0, text, gm: !!gm }); if (D.log.length > 200) D.log.shift(); }
+  function d20() { const r = new Uint32Array(1); try { crypto.getRandomValues(r); } catch (e) { r[0] = Math.random() * 4294967296; } return 1 + (r[0] % 20); }
+  function dRoll(c) { const roll = d20(); c.init = roll + (Number(c.bonus) || 0); dlog(`${c.name} rolls ${c.init} for initiative (d20: ${roll})`, true); }
+  function dAdvance(dir) {
+    const ord = dOrder(false); if (!ord.length) return;
+    if (!D.started) {
+      D.started = true; D.round = 1; D.currentId = ord[0].id;
+      dlog('Combat begins. Round 1'); dlog(`${ord[0].name}'s turn`, ord[0].hidden); return;
+    }
+    let i = ord.findIndex(c => c.id === D.currentId);
+    if (dir > 0) { i += 1; if (i >= ord.length) { i = 0; D.round++; dlog(`Round ${D.round}`); } }
+    else { if (i <= 0) { if (D.round <= 1) return; D.round--; i = ord.length - 1; } else i -= 1; }
+    D.currentId = ord[i].id; dlog(`${ord[i].name}'s turn`, ord[i].hidden);
+  }
+  function dCmd(cmd, id) {
+    const c = id ? C(id) : null;
+    if (id && !c) return;
+    dSnap();
+    if (cmd === 'next') dAdvance(1);
+    else if (cmd === 'prev') dAdvance(-1);
+    else if (cmd === 'end') { D.started = false; D.currentId = null; D.round = 1; dlog('Combat ends'); }
+    else if (cmd === 'rollall') D.cs.filter(x => x.side === 'npc' && !hasInit(x)).forEach(dRoll);
+    else if (cmd === 'newenc') {
+      D.cs = D.cs.filter(x => x.side === 'pc');
+      D.cs.forEach(x => { x.init = null; x.down = false; });
+      D.started = false; D.currentId = null; D.round = 1; D.log = [];
+      dlog('New encounter. Roll initiative!');
+    } else if (c) {
+      if (cmd === 'roll') dRoll(c);
+      else if (cmd === 'hide') { c.hidden = !c.hidden; dlog(c.hidden ? `${c.name} is hidden from players` : `${c.name} appears`, c.hidden); }
+      else if (cmd === 'down') { c.down = !c.down; dlog(c.down ? `${c.name} is down` : `${c.name} is back up`, c.hidden); }
+      else if (cmd === 'unlink') { delete c.claim; dlog(`${c.name} is unlinked from a phone`, true); }
+      else if (cmd === 'remove') {
+        if (D.started && D.currentId === c.id && dOrder(false).length > 1) dAdvance(1);
+        D.cs = D.cs.filter(x => x !== c);
+        if (D.currentId === c.id) { D.currentId = null; D.started = false; }
+        dlog(`${c.name} leaves the fight`, c.hidden);
+      }
+    }
+    dCommit();
+  }
+
+  /* A request sent from a player's phone (already checked by the database rules to come from that phone). */
+  function handleRequest(r) {
+    if (!r || !r.uid || !D) return;
+    if (r.type === 'init') {
+      dSnap();
+      let c = D.cs.find(x => x.claim === r.uid);
+      if (r.cid) { const t = D.cs.find(x => x.id === r.cid && x.side === 'pc'); if (t) { if (c && c !== t) delete c.claim; c = t; } }
+      const name = typeof r.name === 'string' ? r.name.trim().slice(0, 40) : '';
+      if (!c && name) c = D.cs.find(x => x.side === 'pc' && !x.claim && x.name.toLowerCase() === name.toLowerCase());
+      if (!c && name) { c = { id: 'd' + (D.idN++), name, side: 'pc', init: null, bonus: 0 }; D.cs.push(c); dlog(`${name} joins from their phone`); }
+      if (!c) return;
+      if (c.claim !== r.uid) { D.cs.forEach(x => { if (x.claim === r.uid) delete x.claim; }); c.claim = r.uid; }
+      const v = Number(r.init);
+      if (r.init !== undefined && r.init !== null && r.init !== '' && isFinite(v) && v > -30 && v < 100) { c.init = v; dlog(`${c.name} sends initiative ${fmtInit(v)}`); }
+      dCommit();
+    } else if (r.type === 'end') {
+      const cur = D.cs.find(x => x.id === D.currentId);
+      if (D.started && cur && cur.claim === r.uid) { dSnap(); dlog(`${cur.name} ends their turn`); dAdvance(1); dCommit(); }
+    }
+  }
+
+  function renderDBoard() {
+    const forP = isPresent();
+    const nums = !forP || D.showInit;
+    const ord = dOrder(forP), all = dOrder(false);
+    const ci = all.findIndex(c => c.id === D.currentId);
+    let nextId = null;
+    if (D.started && all.length > 1) for (let k = 1; k < all.length; k++) { const c = all[(ci + k) % all.length]; if (!(forP && c.hidden)) { nextId = c.id; break; } }
+    const tl = $('dtimeline');
+    tl.style.setProperty('--n', Math.max(ord.length, 4));
+    tl.innerHTML = ord.length ? ord.map(c => {
+      const now = D.started && c.id === D.currentId, nx = !now && c.id === nextId;
+      const you = PLAYER && myUid && c.claim === myUid;
+      const cls = ['slot', 'icard', c.side === 'pc' ? 'ally' : 'enemy', now ? 'now' : '', nx ? 'next' : '', c.down ? 'down' : '', c.hidden ? 'hiddenc' : ''].join(' ');
+      const tags = [now && nums ? '<span class="tag nx">NOW</span>' : '', nx ? '<span class="tag nx">UP NEXT</span>' : '', you ? '<span class="tag you">YOU</span>' : '',
+        c.down ? '<span class="tag dn">DOWN</span>' : '', !forP && c.hidden ? '<span class="tag hid">HIDDEN</span>' : '', !forP && c.claim ? '<span class="tag you">PHONE</span>' : ''].join('');
+      return `<div class="${cls}">
+        <span class="when">${nums ? fmtInit(c.init) : (now ? 'NOW' : '&nbsp;')}</span>
+        <span class="ico">${c.side === 'pc' ? PERSON : ICON.swords}</span>
+        <span class="nm">${esc(c.name)}</span>
+        ${tags ? `<span class="tags">${tags}</span>` : ''}
+      </div>`;
+    }).join('') : `<p class="muted" style="grid-column:1/-1">No one has initiative yet.</p>`;
+    const pill = $('dPill'), cur = C(D.currentId);
+    if (D.started) {
+      pill.hidden = false;
+      const visible = cur && !(forP && cur.hidden);
+      pill.className = 'turnpill ' + (visible ? (cur.side === 'pc' ? 'ally' : 'enemy') : '');
+      pill.textContent = `Round ${D.round}` + (visible ? ` · ${cur.name}'s turn` : '');
+    } else { pill.hidden = !ord.length; pill.className = 'turnpill'; pill.textContent = 'Rolling initiative'; }
+    const w = D.cs.filter(c => !hasInit(c) && !(forP && c.hidden));
+    const wEl = $('dWaiting');
+    wEl.hidden = !w.length;
+    wEl.innerHTML = w.length ? `<span>Waiting for initiative:</span>${w.map(c => `<span class="chip">${esc(c.name)}</span>`).join('')}` : '';
+  }
+
+  function renderDAct() {
+    const el = $('dActPanel');
+    const ord = dOrder(false), w = D.cs.filter(c => !hasInit(c));
+    let h = '<h3>Combat</h3>';
+    if (!D.started) {
+      h += `<p class="turnbig">Not started</p>
+        <p class="muted">${ord.length} of ${D.cs.length} ${D.cs.length === 1 ? 'has' : 'have'} initiative.${w.length ? ' Waiting on ' + esc(w.map(c => c.name).join(', ')) + '.' : ''}</p>
+        <div class="tools"><button class="btn primary big" data-cmd="dnext" ${ord.length ? '' : 'disabled'}>Start combat</button>
+        ${D.cs.some(c => c.side === 'npc' && !hasInit(c)) ? '<button class="btn" data-cmd="drollall">Roll for monsters</button>' : ''}</div>`;
+    } else {
+      const cur = C(D.currentId);
+      h += `<div><div class="eyebrow">Round ${D.round}</div><p class="turnbig">${cur ? esc(cur.name) + "'s turn" : 'No one is acting'}</p></div>
+        <div class="tools"><button class="btn primary big" data-cmd="dnext">Next turn</button>
+        <button class="btn" data-cmd="dprev">Previous</button>
+        <button class="btn warn" data-cmd="dend">End combat</button></div>
+        <p class="help">Press N for the next turn. Players with a linked phone can end their own turn.</p>`;
+    }
+    h += `<label class="inline"><input type="checkbox" id="dset-nums" data-dset="showInit" ${D.showInit ? 'checked' : ''}> Show initiative numbers to players</label>`;
+    el.innerHTML = h;
+  }
+
+  let dRosterDirty = false;
+  function renderDRoster() {
+    const tbl = $('droster');
+    if (tbl.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') { dRosterDirty = true; return; }
+    dRosterDirty = false;
+    const ord = dOrder(false), pos = new Map(ord.map((c, i) => [c.id, i]));
+    const rows = D.cs.slice().sort((a, b) => (pos.has(a.id) ? pos.get(a.id) : 999) - (pos.has(b.id) ? pos.get(b.id) : 999)).map(c => {
+      const now = D.started && c.id === D.currentId;
+      let st = now ? '<b>Acting</b>' : (hasInit(c) ? '' : '<span class="muted">Waiting</span>');
+      if (c.claim) st += ' <span class="tag you" title="A player linked this character from their phone">PHONE</span>';
+      if (c.hidden) st += ' <span class="tag hid">HIDDEN</span>';
+      if (c.down) st += ' <span class="tag dn">DOWN</span>';
+      return `<tr class="${now ? 'current' : ''} ${c.down ? 'ko' : ''}">
+        <td><span class="sideicon ${c.side === 'pc' ? 'ally' : 'enemy'}" title="${c.side === 'pc' ? 'Player character' : 'Monster / NPC'}">${c.side === 'pc' ? PERSON : ICON.swords}</span></td>
+        <td><input class="nameinput" type="text" id="dname-${c.id}" value="${esc(c.name)}" data-df="name" data-id="${c.id}" aria-label="Name"></td>
+        <td><input type="number" step="any" id="dinit-${c.id}" value="${hasInit(c) ? c.init : ''}" placeholder="—" data-df="init" data-id="${c.id}" aria-label="Initiative"></td>
+        <td><input type="number" id="dbonus-${c.id}" value="${Number(c.bonus) || 0}" data-df="bonus" data-id="${c.id}" aria-label="Initiative bonus"></td>
+        <td class="status">${st}</td>
+        <td><div class="rowbtns">
+          <button class="btn small" data-d="roll" data-id="${c.id}" title="Roll d20 + bonus">Roll</button>
+          ${c.side === 'npc' ? `<button class="btn small" data-d="hide" data-id="${c.id}" title="Hide or show this creature on players' screens">${c.hidden ? 'Reveal' : 'Hide'}</button>` : ''}
+          <button class="btn small" data-d="down" data-id="${c.id}">${c.down ? 'Up' : 'Down'}</button>
+          ${c.claim ? `<button class="btn small" data-d="unlink" data-id="${c.id}" title="Disconnect the player's phone from this character">Unlink</button>` : ''}
+          <button class="btn small warn" data-d="remove" data-id="${c.id}" title="Remove" aria-label="Remove ${esc(c.name)}">✕</button>
+        </div></td></tr>`;
+    }).join('');
+    tbl.innerHTML = `<thead><tr><th></th><th>Name</th><th>Init</th><th>Bonus</th><th>Status</th><th>Controls</th></tr></thead><tbody>${rows ||
+      '<tr><td colspan="6" class="muted">No combatants yet. Add your party and the monsters below.</td></tr>'}</tbody>`;
+  }
+
+  function renderDLog() {
+    const html = (items, gmView) => {
+      if (!items.length) return '<li class="empty">Nothing has happened yet.</li>';
+      return items.map(l => `<li><span class="t">${l.t ? 'R' + l.t : ''}</span><span>${esc(l.text)}${gmView && l.gm ? ' <span class="tag hid">GM ONLY</span>' : ''}</span></li>`).join('');
+    };
+    if (!PLAYER) $('log').innerHTML = html(D.log.slice(-80).reverse(), true);
+    $('plog').innerHTML = html(D.log.filter(l => !l.gm).slice(-12).reverse(), false);
+  }
+
+  /* ---- the player's own panel (phones only) ---- */
+  let meKey = null, meSwitch = false, meWaiting = false;
+  function renderMe() {
+    const el = $('mePanel');
+    const me = myUid ? D.cs.find(c => c.claim === myUid) : null;
+    if (me) meWaiting = false;
+    const myTurn = !!(me && D.started && D.currentId === me.id);
+    const pcs = D.cs.filter(c => c.side === 'pc').map(c => c.id + (c.claim ? '*' : '') + c.name).join(',');
+    const key = [authFailed, !!myUid, me ? me.id + me.name : '', myTurn, meSwitch, meWaiting, me ? '' : pcs].join('|');
+    el.classList.toggle('myturn', myTurn);
+    if (key !== meKey) { meKey = key; el.innerHTML = meHtml(me, myTurn); }
+    const st = $('meStatus'); if (st) st.textContent = meStatus(me);
+    const inp = $('me-init');
+    if (me && inp && document.activeElement !== inp && !inp.dataset.touched) inp.value = hasInit(me) ? fmtInit(me.init) : '';
+  }
+  function meHtml(me, myTurn) {
+    if (authFailed) return `<h3>Your character</h3><p class="muted">Sending from this phone isn't available right now. Tell the GM your initiative out loud.</p>`;
+    if (!myUid) return `<h3>Your character</h3><p class="muted">Connecting…</p>`;
+    if (meWaiting && !me) return `<h3>Your character</h3><p>Sent to the GM.</p><p class="muted">This updates as soon as the GM's tracker picks it up.</p>`;
+    if (!me || meSwitch) {
+      const pcs = D.cs.filter(c => c.side === 'pc');
+      const firstFree = pcs.find(c => !c.claim);
+      const opts = pcs.map(c => `<option value="${c.id}" ${firstFree && c.id === firstFree.id ? 'selected' : ''}>${esc(c.name)}${c.claim && c.claim !== myUid ? ' (taken)' : ''}</option>`).join('');
+      const newSel = !firstFree ? 'selected' : '';
+      return `<h3>Who are you playing?</h3>
+        <form class="row" id="meJoin">
+          <label>Character <select id="me-pick">${opts}<option value="" ${newSel}>Someone new…</option></select></label>
+          <label id="me-newwrap" ${firstFree ? 'hidden' : ''}>Name <input type="text" id="me-name" maxlength="40" autocomplete="off"></label>
+          <label>Initiative <input type="number" id="me-init" inputmode="numeric" placeholder="optional"></label>
+          <button class="btn primary" type="submit" id="me-join">Join</button>
+          ${me ? '<button class="btn ghost" type="button" data-me="cancel">Cancel</button>' : ''}
+        </form><p class="errtext" id="meErr" hidden></p>`;
+    }
+    if (myTurn) return `<div class="big">It's your turn, ${esc(me.name)}!</div>
+      <div class="tools"><button class="btn primary big" data-me="end" id="me-end">End my turn</button></div>
+      <p class="muted" id="meStatus"></p><p class="errtext" id="meErr" hidden></p>`;
+    return `<div class="panel-head"><div class="big">${esc(me.name)}</div><button class="btn small ghost" data-me="switch">Not you?</button></div>
+      <form class="row" id="meInit">
+        <label>Your initiative <input type="number" id="me-init" inputmode="numeric"></label>
+        <button class="btn primary" type="submit" id="me-send">${hasInit(me) ? 'Update' : 'Send to GM'}</button>
+      </form>
+      <p class="muted" id="meStatus"></p><p class="errtext" id="meErr" hidden></p>`;
+  }
+  function meStatus(me) {
+    if (!me) return '';
+    if (!D.started) return hasInit(me) ? `Initiative ${fmtInit(me.init)} is in. Waiting for combat to start.` : 'Roll initiative and send it to the GM.';
+    if (D.currentId === me.id) return "Tap End my turn when you're done.";
+    const all = dOrder(false);
+    const ci = all.findIndex(c => c.id === D.currentId), mi = all.findIndex(c => c.id === me.id);
+    if (mi < 0) return "You're not in the turn order yet.";
+    let n = 0;
+    for (let k = 1; k <= all.length; k++) { const c = all[(ci + k) % all.length]; if (c.id === me.id) break; if (!c.hidden) n++; }
+    return n === 0 ? "You're up next." : `${n} ${n === 1 ? 'turn' : 'turns'} until yours.`;
+  }
+  async function meSend(obj, btn, busyText) {
+    const err = $('meErr'); if (err) err.hidden = true;
+    const old = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = busyText; }
+    try { await adapter.sendRequest(PLAYER_CODE, obj); return true; }
+    catch (e) {
+      console.error(e);
+      if (btn) { btn.disabled = false; btn.textContent = old; }
+      if (err) { err.hidden = false; err.textContent = "That didn't reach the GM. Check your connection and try again."; }
+      return false;
+    }
   }
 
   /* ---------- live sync (Firebase Realtime Database) ---------- */
@@ -789,8 +1139,21 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       if (!firebase.apps.length) firebase.initializeApp(cfg);
       db = firebase.database();
     })());
+    let uid = null;
     return {
-      async signIn() { await init(); const c = await firebase.auth().signInAnonymously(); return c.user.uid; },
+      async signIn() {
+        await init();
+        if (uid) return uid;
+        const cu = firebase.auth().currentUser;
+        uid = cu ? cu.uid : (await firebase.auth().signInAnonymously()).user.uid;
+        return uid;
+      },
+      async sendRequest(code, obj) {
+        const u = await this.signIn();
+        await db.ref('requests/' + code).push(Object.assign({}, obj, { uid: u, at: firebase.database.ServerValue.TIMESTAMP }));
+      },
+      async onRequests(code, cb) { await init(); db.ref('requests/' + code).on('child_added', s => cb(s.key, s.val())); },
+      async removeRequest(code, key) { await init(); await db.ref('requests/' + code + '/' + key).remove(); },
       async claim(code, uid) {
         await init();
         const ref = db.ref('owners/' + code);
@@ -820,6 +1183,13 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
         this.code = code; this.status = 'live';
         try { localStorage.setItem(LIVE_KEY, code); } catch (e) {}
         adapter.onConnection(c => { this.connected = c; renderShare(); });
+        if (adapter.onRequests && this.listening !== code) {
+          this.listening = code;
+          adapter.onRequests(code, (key, val) => {
+            adapter.removeRequest(code, key).catch(e => console.error(e));
+            if (this.code === code && this.status === 'live') handleRequest(val);
+          });
+        }
         this.push(true);
       } catch (err) {
         this.status = 'error';
@@ -838,7 +1208,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     push(now) {
       if (this.status !== 'live' || !adapter) return;
       clearTimeout(this.timer);
-      const send = () => adapter.write(this.code, JSON.stringify(S)).catch(err => { console.error(err); this.status = 'error'; this.error = 'An update did not reach players. Press Reconnect.'; renderShare(); });
+      const send = () => adapter.write(this.code, JSON.stringify({ v: 2, mode: MODE, atb: S, dnd: D })).catch(err => { console.error(err); this.status = 'error'; this.error = 'An update did not reach players. Press Reconnect.'; renderShare(); });
       if (now) send(); else this.timer = setTimeout(send, 120);
     }
   };
@@ -865,7 +1235,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       el.innerHTML = h; qrFor = null; return;
     }
     if (Sync.status === 'off') {
-      h += `<p class="help">Players open a link on their phones and watch the timeline and battle log update as you play. They can't change anything.</p>
+      h += `<p class="help">Players open a link on their phones and follow along as you play. In the Initiative tab they can also send their initiative and end their own turn. Nothing else on your side can be changed from a phone.</p>
         <div><button class="btn primary" data-cmd="golive">Share with players</button></div>`;
     } else if (Sync.status === 'connecting') {
       h += `<p class="muted">Connecting…</p>`;
@@ -902,18 +1272,45 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     badge.hidden = false; badge.className = 'livebadge'; badge.textContent = PLAYER_CODE;
     adapter.subscribe(PLAYER_CODE, str => {
       if (!str) { show(`Table ${PLAYER_CODE} hasn't started yet. Keep this page open; it updates when the GM starts sharing.`); return; }
-      try { S = normalize(JSON.parse(str)); } catch (e) { return; }
+      try {
+        const p = JSON.parse(str);
+        if (p && p.v === 2) { S = normalize(p.atb); D = normalizeD(p.dnd); MODE = p.mode === 'dnd' ? 'dnd' : 'atb'; }
+        else { S = normalize(p); MODE = 'atb'; }
+      } catch (e) { return; }
       show('');
       render();
     }).catch(err => { console.error(err); show('Could not connect to the table. Check your connection and reload.'); });
+    if (adapter.signIn) adapter.signIn().then(uid => { myUid = uid; render(); }).catch(err => { console.error(err); authFailed = true; render(); });
     adapter.onConnection(c => { badge.className = 'livebadge ' + (c ? 'on' : 'bad'); badge.textContent = (c ? 'Live · ' : 'Reconnecting · ') + PLAYER_CODE; }).catch(() => {});
   }
 
   /* ---------- events ---------- */
   document.addEventListener('click', ev => {
-    if (PLAYER) { const f = ev.target.closest('[data-cmd="fullscreen"]'); if (f) fullscreen(); return; }
-    const t = ev.target.closest('[data-act],[data-r],[data-cmd],.slot[data-slot]');
+    if (PLAYER) {
+      if (ev.target.closest('[data-cmd="fullscreen"]')) return fullscreen();
+      const m = ev.target.closest('[data-me]'); if (!m) return;
+      const k = m.dataset.me;
+      if (k === 'switch') { meSwitch = true; meKey = null; return renderMe(); }
+      if (k === 'cancel') { meSwitch = false; meKey = null; return renderMe(); }
+      if (k === 'end') return meSend({ type: 'end' }, m, 'Ending…');
+      return;
+    }
+    const t = ev.target.closest('[data-act],[data-r],[data-d],[data-cmd],.slot[data-slot]');
     if (!t) return;
+    if (t.dataset.d) return dCmd(t.dataset.d, t.dataset.id);
+    if (t.dataset.cmd) {
+      const c = t.dataset.cmd;
+      if (c === 'mode') {
+        MODE = t.dataset.mode === 'dnd' ? 'dnd' : 'atb';
+        try { localStorage.setItem(MKEY, MODE); } catch (e) {}
+        Sync.push(); lastFront = null; return render();
+      }
+      if (c === 'dnext') return dCmd('next');
+      if (c === 'dprev') return dCmd('prev');
+      if (c === 'dend') return dCmd('end');
+      if (c === 'drollall') return dCmd('rollall');
+      if (c === 'dnewenc') return dCmd('newenc');
+    }
     if (t.dataset.act) {
       if (t.dataset.act === 'cancel') return cancelPending();
       return choose(t.dataset.act);
@@ -946,6 +1343,10 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     if (PLAYER) return;
     const inField = /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName);
     if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 'z' && !inField) { ev.preventDefault(); undo(); }
+    if (MODE === 'dnd') {
+      if (!inField && !ev.metaKey && !ev.ctrlKey && !ev.altKey && ev.key.toLowerCase() === 'n' && !isPresent() && dOrder(false).length) { ev.preventDefault(); dCmd('next'); }
+      return;
+    }
     if (ev.key === 'Escape' && S.pending) { ev.preventDefault(); cancelPending(); }
     if ((ev.key === 'Enter' || ev.key === ' ') && document.activeElement.classList.contains('slot')) { ev.preventDefault(); cycleBonus(Number(document.activeElement.dataset.slot)); }
   });
@@ -958,13 +1359,48 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     const el = document.querySelector(`.slot[data-slot="${slot}"]`); if (el) el.focus();
   }
   function undo() {
+    if (MODE === 'dnd') { if (!dUndo.length) return; D = JSON.parse(dUndo.pop()); return dCommit(); }
     if (!undoStack.length) return;
     S = JSON.parse(undoStack.pop()); commit();
   }
 
   document.addEventListener('submit', ev => {
     ev.preventDefault();
-    if (PLAYER) return;
+    if (PLAYER) {
+      const initVal = ($('me-init') || {}).value;
+      const init = initVal === '' || initVal == null ? null : Number(initVal);
+      if (ev.target.id === 'meJoin') {
+        const pick = $('me-pick').value, name = ($('me-name') || {}).value || '';
+        const c = pick ? D.cs.find(x => x.id === pick) : null;
+        if (!c && !name.trim()) { const e = $('meErr'); e.hidden = false; e.textContent = "Type your character's name."; return; }
+        meSend({ type: 'init', cid: c ? c.id : null, name: c ? c.name : name.trim(), init }, $('me-join'), 'Sending…')
+          .then(ok => { if (ok) { meSwitch = false; meWaiting = true; meKey = null; renderMe(); } });
+      } else if (ev.target.id === 'meInit') {
+        if (init === null) { const e = $('meErr'); e.hidden = false; e.textContent = 'Type your initiative first.'; return; }
+        const me = D.cs.find(x => x.claim === myUid); if (!me) return;
+        const btn = $('me-send');
+        meSend({ type: 'init', cid: me.id, init }, btn, 'Sending…').then(ok => {
+          if (ok) { const i = $('me-init'); if (i) delete i.dataset.touched; btn.textContent = 'Sent ✓'; setTimeout(() => { btn.disabled = false; btn.textContent = 'Update'; }, 1500); }
+        });
+      }
+      return;
+    }
+    if (ev.target.id === 'dAddForm') {
+      const name = $('dadd-name').value.trim(); if (!name) return;
+      const side = $('dadd-side').value;
+      const bonus = Math.round(Number($('dadd-bonus').value) || 0);
+      const iv = $('dadd-init').value;
+      const count = Math.max(1, Math.min(20, Math.round(Number($('dadd-count').value) || 1)));
+      dSnap();
+      for (let i = 0; i < count; i++) {
+        const c = { id: 'd' + (D.idN++), name: count > 1 ? `${name} ${String.fromCharCode(65 + i)}` : name, side, bonus, init: iv === '' ? null : Number(iv) };
+        D.cs.push(c);
+        dlog(`${c.name} joins the fight`, side === 'npc');
+        if (iv === '' && side === 'npc') dRoll(c);
+      }
+      $('dadd-name').value = ''; $('dadd-init').value = ''; $('dadd-count').value = 1;
+      return dCommit();
+    }
     if (ev.target.id === 'pendForm') return confirmPending();
     if (ev.target.id === 'addForm') {
       const name = document.getElementById('add-name').value.trim(); if (!name) return;
@@ -986,8 +1422,11 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
   });
   const clampMod = v => Math.max(S.settings.modMin, Math.min(S.settings.modMax, Math.round(Number(v) || 0)));
 
+  document.addEventListener('focusout', () => {
+    setTimeout(() => { if (dRosterDirty && MODE === 'dnd' && !PLAYER) renderDRoster(); }, 0);
+  });
   document.addEventListener('input', ev => {
-    if (PLAYER) return;
+    if (PLAYER) { if (ev.target.id === 'me-init') ev.target.dataset.touched = '1'; return; }
     const t = ev.target;
     if (S.pending && (t.id === 'f-name' || t.id === 'f-base' || t.id === 'f-after')) {
       if (t.id === 'f-name') S.pending.name = t.value;
@@ -1004,8 +1443,21 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
   });
 
   document.addEventListener('change', ev => {
-    if (PLAYER) return;
-    const t = ev.target, st = S.settings;
+    const t = ev.target;
+    if (PLAYER) {
+      if (t.id === 'me-pick') { const w = $('me-newwrap'); if (w) w.hidden = t.value !== ''; }
+      return;
+    }
+    if (t.dataset.df) {
+      const c = C(t.dataset.id); if (!c) return;
+      dSnap();
+      if (t.dataset.df === 'name') { const v = t.value.trim(); if (v) c.name = v.slice(0, 40); }
+      if (t.dataset.df === 'init') c.init = t.value === '' ? null : Number(t.value);
+      if (t.dataset.df === 'bonus') c.bonus = Math.round(Number(t.value) || 0);
+      return dCommit();
+    }
+    if (t.dataset.dset === 'showInit') { D.showInit = t.checked; return dCommit(); }
+    const st = S.settings;
     if (t.dataset.uf) {
       const u = U(t.dataset.id); if (!u) return;
       snapshot();
