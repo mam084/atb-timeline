@@ -1,11 +1,20 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="Trails-style ATB turn tracker for tabletop RPGs, with a live player view for phones.">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<script src="config.js"></script>
+</head>
+<body>
 <title>ATB Battle Timeline</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
-/* Layout: one column. Player-facing timeline strip on top, GM console (current turn | roster) below, settings + log at the foot. Single dark "orbal console" look. */
+/* Layout: one column. Player-facing timeline strip on top, GM console (current turn | roster) below, sharing + settings + log at the foot. Single dark "orbal console" look. */
 :root {
   --bg: #0a0d0f;
   --surface: #11171a;
@@ -40,7 +49,8 @@ h1 { font-size: 1.6rem; }
 h2 { font-size: 1.2rem; }
 h3 { font-size: .8rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); font-weight: 600; }
 .muted { color: var(--muted); }
-.mono, .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+p { margin: 0; }
 
 button { font: inherit; color: inherit; cursor: pointer; }
 button:focus-visible, input:focus-visible, select:focus-visible, .slot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -69,7 +79,13 @@ label.inline { flex-direction: row; align-items: center; gap: 8px; }
 
 /* Header */
 .top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
-.tools { display: flex; flex-wrap: wrap; gap: 8px; }
+.tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.livebadge { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-display); font-weight: 600; font-size: .82rem; letter-spacing: .06em; color: var(--muted); }
+.livebadge::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.livebadge.on { color: var(--ally); }
+.livebadge.on::before { background: var(--ally); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ally) 25%, transparent); }
+.livebadge.bad { color: var(--enemy); }
+.livebadge.bad::before { background: var(--enemy); }
 
 /* Timeline (player-facing) */
 .board { border: 1px solid var(--line); border-radius: 16px; background: var(--surface); padding: 18px; display: flex; flex-direction: column; gap: 14px; }
@@ -85,7 +101,7 @@ label.inline { flex-direction: row; align-items: center; gap: 8px; }
 .slot {
   position: relative; background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
   padding: 12px 6px 14px; min-height: 140px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
-  text-align: center; transition: border-color .15s, transform .25s;
+  text-align: center; transition: border-color .15s;
 }
 .slot .when { font-family: var(--font-mono); font-size: .8rem; color: var(--muted); letter-spacing: .04em; min-height: 1.2em; }
 .slot .ico svg { width: 26px; height: 26px; display: block; }
@@ -96,14 +112,17 @@ label.inline { flex-direction: row; align-items: center; gap: 8px; }
 .slot.cast .ico { color: var(--cast); }
 .slot.now { border: 2px solid var(--accent); background: var(--accent-tint); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent); }
 .slot.now .when { color: var(--fg); font-family: var(--font-display); font-weight: 600; letter-spacing: .14em; }
-.slot.proj { opacity: .6; border-style: dashed; }
 .slot.sb { border-color: var(--gold); }
 .slot.sb.now { box-shadow: 0 0 0 4px color-mix(in srgb, var(--gold) 18%, transparent); }
+.slot.ghost { border: 2px dashed var(--accent); background: transparent; animation: ghostIn .3s ease-out both; }
+.slot.ghost .when { color: var(--accent); }
+.slot.ghost .ico, .slot.ghost .nm { opacity: .85; }
+@keyframes ghostIn { from { transform: scale(.94); } to { transform: none; } }
 .gmmode .slot { cursor: pointer; }
 .gmmode .slot:hover { border-color: var(--muted); }
-.gmmode .slot.now:hover { border-color: var(--accent); }
+.gmmode .slot.now:hover, .gmmode .slot.ghost:hover { border-color: var(--accent); }
 .slot.enter { animation: slotIn .35s ease-out both; }
-@keyframes slotIn { from { transform: translateY(6px); opacity: .4; } to { transform: none; } }
+@keyframes slotIn { from { transform: translateY(6px); } to { transform: none; } }
 
 .chip {
   font-family: var(--font-display); font-weight: 700; font-size: .82rem; letter-spacing: .06em;
@@ -114,6 +133,9 @@ label.inline { flex-direction: row; align-items: center; gap: 8px; }
 .chip.blue { color: var(--blue); background: color-mix(in srgb, var(--blue) 16%, transparent); }
 .chip.gold { color: var(--gold); background: color-mix(in srgb, var(--gold) 16%, transparent); }
 .tag { font-family: var(--font-display); font-size: .66rem; font-weight: 700; letter-spacing: .14em; color: var(--gold); }
+.tag.pv { color: var(--accent); }
+.previewline { font-size: .92rem; padding: 10px 12px; border-radius: 10px; border: 1px dashed color-mix(in srgb, var(--accent) 60%, var(--line)); display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.previewline b { font-family: var(--font-display); font-weight: 600; }
 .board-foot { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: .85rem; color: var(--muted); }
 .legend { display: flex; gap: 14px; flex-wrap: wrap; }
 .legend span { display: inline-flex; align-items: center; gap: 5px; }
@@ -138,11 +160,13 @@ label.inline { flex-direction: row; align-items: center; gap: 8px; }
 .actbtn b { font-family: var(--font-display); font-weight: 600; font-size: .95rem; }
 .actbtn span { font-family: var(--font-mono); font-size: .76rem; color: var(--muted); }
 .actbtn.scraft b { color: var(--gold); }
-.form { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
-.form label.grow { flex: 1 1 160px; }
-.form input[type="text"] { width: 100%; }
-.preview { font-size: .85rem; color: var(--muted); }
-.preview b { color: var(--fg); font-family: var(--font-mono); font-weight: 500; }
+.confirm { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid var(--accent); border-radius: 12px; background: var(--bg); }
+.confirm .fields { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.confirm label.grow { flex: 1 1 160px; }
+.confirm input[type="text"] { width: 100%; }
+.landing { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; font-size: .9rem; }
+.landing .k { color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .1em; font-family: var(--font-display); }
+.landing .v { font-family: var(--font-mono); font-size: 1rem; }
 
 .scroll-x { overflow-x: auto; margin-inline: -4px; padding-inline: 4px; }
 table { width: 100%; border-collapse: collapse; font-size: .9rem; }
@@ -162,28 +186,48 @@ td .nameinput { width: 9.5em; font-weight: 500; }
 .addrow input[type="text"] { width: 100%; }
 
 .foot { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.stack { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 .settings { display: flex; flex-direction: column; gap: 14px; }
+.row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
 .costs { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.example { font-size: .86rem; color: var(--muted); }
+.example b { color: var(--fg); font-family: var(--font-mono); font-weight: 500; }
 .log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 340px; overflow-y: auto; font-size: .86rem; }
 .log li { display: flex; gap: 10px; align-items: baseline; padding-bottom: 6px; border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent); }
 .log .t { font-family: var(--font-mono); color: var(--muted); font-size: .76rem; min-width: 2.6em; }
 .log .chip { font-size: .68rem; padding: 0 7px; }
-.help { font-size: .86rem; color: var(--muted); max-width: 65ch; }
-.help p { margin: 0 0 6px; }
+.log .t:empty { display: none; }
+.log .empty { color: var(--muted); border: 0; }
+.help { font-size: .86rem; color: var(--muted); max-width: 65ch; display: flex; flex-direction: column; gap: 6px; }
+.share { display: flex; flex-direction: column; gap: 12px; }
+.sharelink { display: flex; gap: 8px; align-items: center; }
+.sharelink input { flex: 1; font-family: var(--font-mono); font-size: .84rem; }
+.sharebody { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.sharebody > div { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.qr { background: #ffffff; padding: 8px; border-radius: 8px; line-height: 0; }
+.qr img, .qr canvas { display: block; width: 148px; height: 148px; }
+.code { font-family: var(--font-mono); font-size: 1.3rem; letter-spacing: .14em; color: var(--fg); }
+.errtext { color: var(--enemy); font-size: .88rem; }
 
-/* Present (player) mode */
+/* Player log (player view only) */
+.plog { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 16px 18px; flex-direction: column; gap: 10px; }
+.plog .log { max-height: none; font-size: 1rem; }
+.notice { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 24px; text-align: center; color: var(--muted); }
+
+/* Present (GM screen) and player (phone) modes */
 .present-only { display: none; }
 body.present .gm { display: none !important; }
 body.present .present-only { display: flex; }
+body.player .gm-present-only { display: none !important; }
 body.present .app { max-width: none; }
-body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
-body.present .slot { min-height: 190px; gap: 8px; }
-body.present .slot .ico svg { width: 38px; height: 38px; }
-body.present .slot .nm { font-size: 1.3rem; }
-body.present .slot .when { font-size: 1rem; }
-body.present .chip { font-size: 1rem; }
-body.present .turnpill { font-size: 1.3rem; }
-body.present h1 { font-size: 2rem; }
+body.present .slot { min-height: 170px; gap: 7px; }
+body.present .slot .ico svg { width: 36px; height: 36px; }
+body.present .slot .nm { font-size: 1.2rem; }
+body.present .slot .when { font-size: .95rem; }
+body.present .chip { font-size: .95rem; }
+body.present .turnpill { font-size: 1.2rem; }
+body.present h1 { font-size: 1.9rem; }
+body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 
 @media (min-width: 900px) {
   .timeline, body.present .timeline { grid-template-columns: repeat(var(--n, 10), minmax(0, 1fr)); }
@@ -192,12 +236,16 @@ body.present h1 { font-size: 2rem; }
   .console, .foot { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 480px) {
-  .timeline { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
-  .slot { min-height: 124px; }
+  .timeline, body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+  .slot, body.present .slot { min-height: 124px; }
+  body.present .slot .nm { font-size: 1rem; }
+  body.present .slot .ico svg { width: 28px; height: 28px; }
+  body.present .chip { font-size: .8rem; }
+  body.present h1 { font-size: 1.4rem; }
   .board, .panel { padding: 14px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .slot, .slot.enter { animation: none; transition: none; }
+  .slot, .slot.enter, .slot.ghost { animation: none; transition: none; }
 }
 </style>
 
@@ -205,26 +253,36 @@ body.present h1 { font-size: 2rem; }
   <header class="top">
     <h1>AT Battle Timeline</h1>
     <div class="tools gm">
+      <span class="livebadge" id="gmLive" hidden></span>
       <button class="btn" data-cmd="undo" id="undoBtn" title="Undo (Ctrl/Cmd+Z)">Undo</button>
       <button class="btn" data-cmd="newbattle" title="Shuffle starting positions and reset the turn counter">New battle</button>
       <button class="btn primary" data-cmd="present" title="Hide the GM controls for the table screen">Player view</button>
     </div>
     <div class="tools present-only">
+      <span class="livebadge" id="playerLive" hidden></span>
       <button class="btn" data-cmd="fullscreen">Fullscreen</button>
-      <button class="btn primary" data-cmd="present">Back to GM</button>
+      <button class="btn primary gm-present-only" data-cmd="present">Back to GM</button>
     </div>
   </header>
 
-  <section class="board" aria-label="Turn order">
+  <div class="notice" id="notice" hidden></div>
+
+  <section class="board" id="board" aria-label="Turn order">
     <div class="board-head">
       <h2>Turn order</h2>
       <span class="turnpill" id="turnPill"></span>
     </div>
     <div class="timeline" id="timeline"></div>
+    <div class="previewline" id="previewLine" hidden></div>
     <div class="board-foot">
       <div class="legend" id="legend"></div>
-      <span class="gm">Click a slot to change its AT bonus. Dashed slots are projected turns.</span>
+      <span class="gm">Click a slot to change its AT bonus.</span>
     </div>
+  </section>
+
+  <section class="plog present-only" id="plogWrap" aria-label="Battle log">
+    <h3>Battle log</h3>
+    <ul class="log" id="plog"></ul>
   </section>
 
   <div class="console gm">
@@ -240,7 +298,7 @@ body.present h1 { font-size: 2rem; }
         <label>Side
           <select id="add-side"><option value="ally">Party</option><option value="enemy">Enemy</option></select>
         </label>
-        <label>SPD <input type="number" id="add-spd" value="20" min="1" max="99"></label>
+        <label>Delay mod <input type="number" id="add-mod" value="0" step="1"></label>
         <label class="inline"><input type="checkbox" id="add-now"> Act next</label>
         <button class="btn" type="submit">Add</button>
       </form>
@@ -248,24 +306,44 @@ body.present h1 { font-size: 2rem; }
   </div>
 
   <div class="foot gm">
-    <section class="panel settings" aria-label="Settings">
-      <h3>Table settings</h3>
-      <label>Slots shown: <span class="num" id="showVal"></span>
-        <input type="range" id="set-show" min="6" max="14" step="1" data-set="show">
-      </label>
-      <label>AT bonus frequency: <span class="num" id="rateVal"></span>
-        <input type="range" id="set-rate" min="0" max="60" step="5" data-set="rate">
-      </label>
-      <label class="inline"><input type="checkbox" id="set-numbers" data-set="numbers"> Show AT numbers in player view</label>
-      <div><button class="btn small" data-cmd="reroll">Reroll upcoming bonuses</button></div>
-      <h3>Action delay (base, at SPD 20)</h3>
-      <div class="costs" id="costs"></div>
-      <div class="help">
-        <p>Delay on the timeline = base × 20 ÷ SPD, rounded. A faster unit gets its next turn sooner for the same action.</p>
-        <p>AT bonuses belong to timeline positions, not to people. Delaying or hastening a unit moves it onto a different bonus.</p>
-      </div>
-      <div><button class="btn small warn" data-cmd="reset">Load sample encounter</button></div>
-    </section>
+    <div class="stack">
+      <section class="panel share" id="sharePanel" aria-label="Players' phones"></section>
+      <section class="panel settings" aria-label="Settings">
+        <h3>Delay modifier</h3>
+        <div class="row">
+          <label>How it applies
+            <select id="set-mode" data-set="mode">
+              <option value="pct">Proportional (× base delay)</option>
+              <option value="flat">Flat (+ / − to base delay)</option>
+            </select>
+          </label>
+          <label id="pctWrap">Each point
+            <select id="set-pct" data-set="pct">
+              <option value="5">5%</option><option value="10">10%</option><option value="15">15%</option>
+              <option value="20">20%</option><option value="25">25%</option>
+            </select>
+          </label>
+          <label>Lowest <input type="number" id="set-modmin" min="-9" max="0" data-set="modMin"></label>
+          <label>Highest <input type="number" id="set-modmax" min="0" max="9" data-set="modMax"></label>
+        </div>
+        <p class="example" id="modExample"></p>
+        <h3>Table settings</h3>
+        <label>Most slots shown: <span class="num" id="showVal"></span>
+          <input type="range" id="set-show" min="6" max="14" step="1" data-set="show">
+        </label>
+        <label>AT bonus frequency: <span class="num" id="rateVal"></span>
+          <input type="range" id="set-rate" min="0" max="60" step="5" data-set="rate">
+        </label>
+        <label class="inline"><input type="checkbox" id="set-numbers" data-set="numbers"> Show AT numbers to players</label>
+        <div><button class="btn small" data-cmd="reroll">Reroll upcoming bonuses</button></div>
+        <h3>Base delay for each action</h3>
+        <div class="costs" id="costs"></div>
+        <div class="help">
+          <p>AT bonuses belong to timeline positions, not to people. Delaying or hastening a unit moves it onto a different bonus.</p>
+        </div>
+        <div><button class="btn small warn" data-cmd="reset">Load sample encounter</button></div>
+      </section>
+    </div>
     <section class="panel" aria-label="Battle log">
       <h3>Battle log</h3>
       <ul class="log" id="log"></ul>
@@ -280,14 +358,19 @@ body.present h1 { font-size: 2rem; }
   <option value="Air Strike"><option value="Holy Breath"><option value="Spiral Flare"><option value="Diamond Dust">
 </datalist>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 (function () {
-  const KEY = 'atb-timeline-v1';
+  const KEY = 'atb-timeline-v2';
+  const LIVE_KEY = 'atb-timeline-live';
+  const params = new URLSearchParams(location.search);
+  const PLAYER_CODE = (params.get('t') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const PLAYER = !!PLAYER_CODE;
+
   const ICON = {
     shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3l7 3v5.2c0 4.4-2.9 7.9-7 9.8-4.1-1.9-7-5.4-7-9.8V6z"/></svg>',
     swords: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h4l9 9M4 4v4l9 9M20 4h-4l-9 9M20 4v4l-9 9M15 15l-2 2M9 15l2 2M16.5 17.5L19.5 20.5M7.5 17.5L4.5 20.5"/></svg>',
-    flame: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3c.8 3 5 5.2 5 10a5 5 0 0 1-10 0c0-2.6 1.4-4.2 2.6-5.2.2 1.9 1.2 3 2.4 3.2-1-3 .2-5.8 0-8z"/></svg>',
-    star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6-4.5-4.2 6.1-.7z"/></svg>'
+    flame: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3c.8 3 5 5.2 5 10a5 5 0 0 1-10 0c0-2.6 1.4-4.2 2.6-5.2.2 1.9 1.2 3 2.4 3.2-1-3 .2-5.8 0-8z"/></svg>'
   };
   const BONUS = {
     crit: { label: 'CRIT', cls: 'red', desc: 'Critical: damage or healing this turn ×1.5', w: 3 },
@@ -299,17 +382,29 @@ body.present h1 { font-size: 2rem; }
     cp50: { label: 'CP +50', cls: 'gold', desc: 'Gain 50 CP at the start of the turn', w: 1 }
   };
   const BONUS_KEYS = Object.keys(BONUS);
+  const ACTIONS = {
+    attack: { label: 'Attack', cost: 'attack' },
+    craft: { label: 'Craft', cost: 'craft', named: 'Craft name' },
+    arts: { label: 'Arts', cost: 'castTime', named: 'Art name' },
+    item: { label: 'Item', cost: 'item' },
+    move: { label: 'Move', cost: 'move' },
+    defend: { label: 'Defend', cost: 'defend' },
+    scraft: { label: 'S-Craft', cost: 'scraft', named: 'S-Craft name' },
+    custom: { label: 'Custom', cost: 'attack', named: 'Action' },
+    resolve: { label: 'Resolve', cost: 'afterCast' }
+  };
   const COST_LABELS = { attack: 'Attack', craft: 'Craft', castTime: 'Arts cast', afterCast: 'Arts after-cast', item: 'Item', move: 'Move', defend: 'Defend', scraft: 'S-Craft' };
   const DEF_COSTS = { attack: 10, craft: 12, castTime: 6, afterCast: 8, item: 8, move: 6, defend: 8, scraft: 16 };
+  const DEF_SETTINGS = { show: 12, rate: 30, numbers: false, step: 3, mode: 'pct', pct: 10, modMin: -2, modMax: 2 };
 
   function sample() {
     const units = [
-      { id: 'u1', name: 'Estelle', side: 'ally', spd: 22 },
-      { id: 'u2', name: 'Goblin', side: 'enemy', spd: 18 },
-      { id: 'u3', name: 'Joshua', side: 'ally', spd: 26 },
-      { id: 'u4', name: 'Kloe', side: 'ally', spd: 20 },
-      { id: 'u5', name: 'Schera', side: 'ally', spd: 20 },
-      { id: 'u6', name: 'Knight', side: 'enemy', spd: 16 }
+      { id: 'u1', name: 'Estelle', side: 'ally', mod: 0 },
+      { id: 'u2', name: 'Goblin', side: 'enemy', mod: 1 },
+      { id: 'u3', name: 'Joshua', side: 'ally', mod: -2 },
+      { id: 'u4', name: 'Kloe', side: 'ally', mod: 0 },
+      { id: 'u5', name: 'Schera', side: 'ally', mod: -1 },
+      { id: 'u6', name: 'Knight', side: 'enemy', mod: 2 }
     ];
     const ticks = [0, 3, 5, 7, 9, 11];
     const entries = units.map((u, i) => ({ unitId: u.id, tick: ticks[i], seq: i + 1, kind: 'turn' }));
@@ -318,24 +413,48 @@ body.present h1 { font-size: 2rem; }
       units, entries, now: 0, slot: 0, seqN: 10, idN: 7, seed: 20261015,
       overrides: { 0: 'none', 1: 'crit', 2: 'none', 3: 'none', 4: 'hp10', 5: 'none' },
       costs: Object.assign({}, DEF_COSTS),
-      settings: { show: 10, rate: 30, numbers: false, step: 3 },
+      settings: Object.assign({}, DEF_SETTINGS),
+      pending: null,
       log: [{ t: 0, text: 'Sample encounter loaded. Edit the roster or press New battle.' }]
     };
   }
+  function normalize(s) {
+    if (!s || !Array.isArray(s.units)) return sample();
+    s.costs = Object.assign({}, DEF_COSTS, s.costs);
+    s.settings = Object.assign({}, DEF_SETTINGS, s.settings);
+    s.units.forEach(u => { if (typeof u.mod !== 'number') u.mod = 0; });
+    s.overrides = s.overrides || {};
+    s.log = s.log || [];
+    if (s.pending === undefined) s.pending = null;
+    return s;
+  }
 
-  let S, undoStack = [], pending = null, lastFront = null;
-  try { const raw = localStorage.getItem(KEY); if (raw) S = JSON.parse(raw); } catch (e) {}
-  if (!S || !Array.isArray(S.units)) S = sample();
-  S.costs = Object.assign({}, DEF_COSTS, S.costs);
+  let S = null, undoStack = [], lastFront = null;
+  if (!PLAYER) {
+    try { const raw = localStorage.getItem(KEY); if (raw) S = JSON.parse(raw); } catch (e) {}
+    S = normalize(S);
+  }
 
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+  function save() {
+    if (PLAYER) return;
+    try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {}
+    Sync.push();
+  }
   function snapshot() { undoStack.push(JSON.stringify(S)); if (undoStack.length > 80) undoStack.shift(); }
   function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
   const U = id => S.units.find(u => u.id === id);
   const E = id => S.entries.find(e => e.unitId === id);
-  const delay = (base, spd) => Math.max(1, Math.round(Number(base) * 20 / Math.max(1, Number(spd) || 1)));
   const cmp = (a, b) => a.tick - b.tick || a.seq - b.seq;
   function queue() { return S.entries.filter(e => { const u = U(e.unitId); return u && !u.ko; }).sort(cmp); }
+
+  /* Delay = base delay adjusted by the character's modifier. */
+  function delay(base, mod) {
+    base = Number(base) || 0; mod = Number(mod) || 0;
+    const st = S.settings;
+    const v = st.mode === 'flat' ? base + mod : base * (1 + mod * st.pct / 100);
+    return Math.max(1, Math.round(v));
+  }
+  const fmtMod = m => (m > 0 ? '+' : m < 0 ? '−' : '±') + Math.abs(m);
 
   function hash(a, b) {
     let h = Math.imul(a ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(b + 0x632be5ab, 0xc2b2ae35);
@@ -351,157 +470,198 @@ body.present h1 { font-size: 2rem; }
     return 'crit';
   }
 
-  function project(n) {
-    const live = queue().map(e => Object.assign({}, e));
-    const out = []; let g = 0;
-    while (out.length < n && live.length && g++ < 300) {
-      live.sort(cmp);
-      const e = live.shift(); out.push(e);
-      const u = U(e.unitId);
-      const base = e.kind === 'cast' ? (e.after ?? S.costs.afterCast) : S.costs.attack;
-      live.push({ unitId: e.unitId, tick: e.tick + delay(base, u.spd), seq: 1e6 + g, kind: 'turn', projected: true });
-    }
-    return out;
+  /* Where the acting character lands if the pending action is confirmed. */
+  function preview() {
+    const p = S.pending, q = queue(), cur = q[0];
+    if (!p || !cur || p.unitId !== cur.unitId) return null;
+    const u = U(cur.unitId);
+    const d = delay(p.base, u.mod);
+    const tick = cur.tick + d;
+    const others = q.slice(1);
+    const index = others.filter(e => e.tick <= tick).length; // ties land behind
+    const slot = S.slot + 1 + index;
+    return { d, tick, index, slot, bonus: bonusAt(slot), u, cur, p, cast: p.kind === 'arts' };
+  }
+  function actionText(p, u) {
+    const a = ACTIONS[p.kind];
+    if (p.kind === 'resolve') return `${u.name}'s ${p.name} resolves`;
+    if (p.kind === 'arts') return `${u.name} begins casting ${p.name || 'an art'}`;
+    if (p.kind === 'craft') return `${u.name} uses ${p.name || 'a craft'}`;
+    if (p.kind === 'scraft') return `${u.name} unleashes ${p.name || 'an S-Craft'}`;
+    if (p.kind === 'custom') return `${u.name}: ${p.name || 'custom action'}`;
+    return `${u.name}: ${a.label}`;
   }
 
-  function addLog(text, bonus) { S.log.push({ t: S.slot + 1, text, bonus: bonus && bonus !== 'none' ? bonus : null }); if (S.log.length > 200) S.log.shift(); }
+  function addLog(text, d, bonus) {
+    S.log.push({ t: S.slot + 1, text, d: d ?? null, bonus: bonus && bonus !== 'none' ? bonus : null });
+    if (S.log.length > 200) S.log.shift();
+  }
 
-  /* ---------- actions ---------- */
-  function act(kind, o) {
-    o = o || {};
+  /* ---------- GM actions ---------- */
+  function choose(kind) {
     const cur = queue()[0]; if (!cur) return;
-    snapshot();
-    const u = U(cur.unitId), b = bonusAt(S.slot);
-    S.now = cur.tick;
-    let base, text;
-    if (cur.kind === 'cast') {
-      base = cur.after ?? S.costs.afterCast;
-      text = `${u.name}'s ${cur.art} resolves`;
-      cur.kind = 'turn'; delete cur.art; delete cur.after;
-    } else if (kind === 'arts') {
-      base = o.base; cur.kind = 'cast'; cur.art = o.name || 'Arts'; cur.after = o.after;
-      text = `${u.name} begins casting ${cur.art}`;
+    const prev = S.pending && S.pending.unitId === cur.unitId && S.pending.kind === kind ? S.pending : null;
+    if (kind === 'resolve') {
+      S.pending = { unitId: cur.unitId, kind, name: cur.art, base: cur.after ?? S.costs.afterCast };
     } else {
-      base = o.base ?? S.costs[kind];
-      const names = { attack: 'Attack', item: 'Item', move: 'Move', defend: 'Defend' };
-      if (kind === 'craft') text = `${u.name} uses ${o.name || 'a craft'}`;
-      else if (kind === 'scraft') text = `${u.name} unleashes ${o.name || 'an S-Craft'}`;
-      else if (kind === 'custom') text = `${u.name}: ${o.name || 'custom action'}`;
-      else text = `${u.name}: ${names[kind]}`;
+      S.pending = prev || { unitId: cur.unitId, kind, name: '', base: S.costs[ACTIONS[kind].cost] };
+      if (kind === 'arts' && S.pending.after == null) S.pending.after = S.costs.afterCast;
     }
-    const d = delay(base, u.spd);
+    save(); render();
+    const f = document.getElementById('f-name') || document.getElementById('f-confirm');
+    if (f) f.focus();
+  }
+  function cancelPending() { if (!S.pending) return; S.pending = null; save(); render(); }
+
+  function confirmPending() {
+    const pv = preview(); if (!pv) return;
+    snapshot();
+    const { cur, u, p, d } = pv;
+    const b = bonusAt(S.slot);
+    S.now = cur.tick;
+    if (cur.kind === 'cast' || p.kind === 'resolve') { cur.kind = 'turn'; delete cur.art; delete cur.after; }
+    if (p.kind === 'arts') { cur.kind = 'cast'; cur.art = p.name || 'Arts'; cur.after = p.after ?? S.costs.afterCast; }
     cur.tick = S.now + d; cur.seq = ++S.seqN; cur.sbreak = false;
-    addLog(`${text} (+${d})`, b);
+    addLog(actionText(p, u), d, b);
     S.slot++;
-    pending = null;
+    S.pending = null;
     commit();
   }
 
   function rosterCmd(cmd, id) {
     const u = U(id), e = E(id); if (!u || !e) return;
-    const q = queue(), front = q[0];
+    const front = queue()[0];
     const step = Number(S.settings.step) || 1;
     snapshot();
     if (cmd === 'delay') {
-      e.tick += step; e.seq = ++S.seqN; addLog(`${u.name} delayed +${step}`);
+      e.tick += step; e.seq = ++S.seqN; addLog(`${u.name} is delayed`, step);
     } else if (cmd === 'hasten') {
       if (front && e !== front) {
         let t = e.tick - step;
         if (t <= front.tick) { t = front.tick; e.seq = front.seq + 0.001; }
         e.tick = t;
       }
-      addLog(`${u.name} hastened −${step}`);
+      addLog(`${u.name} is hastened`, -step);
     } else if (cmd === 'sbreak') {
       if (front) { e.tick = front.tick; e.seq = front.seq - 0.001; }
-      if (e.kind === 'cast') { addLog(`${u.name} drops ${e.art}`); }
+      if (e.kind === 'cast') addLog(`${u.name} drops ${e.art}`);
       e.kind = 'turn'; delete e.art; delete e.after; e.sbreak = true;
       addLog(`${u.name} S-Breaks and takes the current turn`);
-      pending = { kind: 'scraft', name: '', base: S.costs.scraft };
+      S.pending = { unitId: u.id, kind: 'scraft', name: '', base: S.costs.scraft };
     } else if (cmd === 'impede') {
       if (e.kind === 'cast') { addLog(`${u.name}'s ${e.art} is impeded`); e.kind = 'turn'; delete e.art; delete e.after; }
+      if (S.pending && S.pending.unitId === id) S.pending = null;
     } else if (cmd === 'ko') {
       u.ko = !u.ko;
       if (!u.ko) {
         const nf = queue().filter(x => x !== e)[0];
         const base = nf ? nf.tick : S.now;
-        if (e.tick < base) { e.tick = base + delay(S.costs.attack, u.spd); e.seq = ++S.seqN; }
+        if (e.tick < base) { e.tick = base + delay(S.costs.attack, u.mod); e.seq = ++S.seqN; }
         e.kind = 'turn'; delete e.art; e.sbreak = false;
       }
       addLog(u.ko ? `${u.name} is knocked out` : `${u.name} is back in the fight`);
     } else if (cmd === 'remove') {
       S.units = S.units.filter(x => x.id !== id); S.entries = S.entries.filter(x => x.unitId !== id);
-      addLog(`${u.name} removed`);
+      addLog(`${u.name} leaves the battle`);
     }
+    // A pending choice only stays if its character is still first in line.
+    const nf = queue()[0];
+    if (S.pending && (!nf || nf.unitId !== S.pending.unitId)) S.pending = null;
     commit();
   }
 
   function newBattle() {
     snapshot();
-    S.now = 0; S.slot = 0; S.seed = (Math.random() * 2 ** 31) | 0; S.overrides = {};
+    S.now = 0; S.slot = 0; S.seed = (Math.random() * 2 ** 31) | 0; S.overrides = {}; S.pending = null;
     S.units.forEach(u => { u.ko = false; });
     S.entries.forEach(e => {
       const u = U(e.unitId);
-      e.tick = Math.round(delay(S.costs.attack, u.spd) * Math.random());
+      e.tick = Math.round(delay(S.costs.attack, u.mod) * Math.random());
       e.seq = ++S.seqN; e.kind = 'turn'; delete e.art; delete e.after; e.sbreak = false;
     });
-    S.log = []; addLog('New battle. Starting positions shuffled by SPD.');
-    pending = null; commit();
+    S.log = []; addLog('A new battle begins.');
+    commit();
   }
 
   function commit() { save(); render(); }
 
   /* ---------- render ---------- */
-  function iconFor(e, u) { return e.kind === 'cast' ? ICON.flame : (u.side === 'ally' ? ICON.shield : ICON.swords); }
+  function iconFor(kind, u) { return kind === 'cast' ? ICON.flame : (u.side === 'ally' ? ICON.shield : ICON.swords); }
+  function chipHtml(b) { return b && b !== 'none' && BONUS[b] ? `<span class="chip ${BONUS[b].cls}">${BONUS[b].label}</span>` : ''; }
+  const isPresent = () => document.body.classList.contains('present');
+  const showNums = () => !isPresent() || S.settings.numbers;
 
   function renderTimeline() {
-    const present = document.body.classList.contains('present');
-    const showNums = !present || S.settings.numbers;
-    const list = project(Number(S.settings.show));
+    const present = isPresent(), nums = showNums();
+    const q = queue();
+    const pv = preview();
     const tl = document.getElementById('timeline');
     const pill = document.getElementById('turnPill');
-    document.querySelector('.board').classList.toggle('gmmode', !present);
-    if (!list.length) {
-      tl.innerHTML = '<p class="muted" style="grid-column:1/-1">No one is in the fight yet. Add combatants in the GM panel.</p>';
-      pill.textContent = ''; pill.hidden = true; return;
+    const pline = document.getElementById('previewLine');
+    document.getElementById('board').classList.toggle('gmmode', !present);
+    if (!q.length) {
+      tl.innerHTML = `<p class="muted" style="grid-column:1/-1">${PLAYER ? 'Waiting for the GM to add combatants.' : 'No one is in the fight yet. Add combatants below.'}</p>`;
+      pill.hidden = true; pline.hidden = true; return;
     }
-    tl.style.setProperty('--n', list.length);
-    const front = list[0];
+    const front = q[0];
+    // Display list: current turn, then everyone else, with the preview ghost dropped in where it would land.
+    const items = q.map((e, i) => ({ e, ghost: false, now: i === 0 }));
+    if (pv) items.splice(1 + pv.index, 0, { ghost: true });
+    const shown = items.slice(0, Math.max(Number(S.settings.show), pv ? pv.index + 2 : 0));
+    tl.style.setProperty('--n', shown.length);
     const frontKey = front.unitId + ':' + front.seq;
     const moved = frontKey !== lastFront; lastFront = frontKey;
-    tl.innerHTML = list.map((e, i) => {
-      const u = U(e.unitId), slot = S.slot + i, b = bonusAt(slot), cast = e.kind === 'cast';
-      const cls = ['slot', u.side, cast ? 'cast' : '', i === 0 ? 'now' : '', e.projected ? 'proj' : '', e.sbreak ? 'sb' : '', moved ? 'enter' : ''].join(' ');
-      const when = i === 0 ? 'NOW' : (showNums ? '+' + (e.tick - front.tick) : '');
-      const title = present ? '' : ` title="Slot ${slot + 1}. Click to change bonus"`;
-      return `<div class="${cls}" data-slot="${slot}" style="animation-delay:${i * 25}ms"${present ? '' : ' tabindex="0" role="button"'}${title}>
+
+    tl.innerHTML = shown.map((it, i) => {
+      const slot = S.slot + i, b = bonusAt(slot);
+      const attrs = present ? '' : ` data-slot="${slot}" tabindex="0" role="button" title="Slot ${slot + 1}. Click to change bonus"`;
+      if (it.ghost) {
+        const name = pv.cast ? (pv.p.name || 'Arts') : pv.u.name;
+        return `<div class="slot ghost ${pv.u.side} ${pv.cast ? 'cast' : ''}"${attrs}>
+          <span class="when">${nums ? '+' + pv.d : '&nbsp;'}</span>
+          <span class="ico">${iconFor(pv.cast ? 'cast' : 'turn', pv.u)}</span>
+          <span class="nm">${esc(name)}</span>
+          ${pv.cast ? `<span class="sub">${esc(pv.u.name)} casting</span>` : ''}
+          <span class="tag pv">PREVIEW</span>
+          ${chipHtml(b)}
+        </div>`;
+      }
+      const e = it.e, u = U(e.unitId), cast = e.kind === 'cast';
+      const cls = ['slot', u.side, cast ? 'cast' : '', it.now ? 'now' : '', e.sbreak ? 'sb' : '', moved ? 'enter' : ''].join(' ');
+      const when = it.now ? 'NOW' : (nums ? '+' + (e.tick - front.tick) : '');
+      return `<div class="${cls}"${attrs} style="animation-delay:${i * 25}ms">
         <span class="when">${when || '&nbsp;'}</span>
-        <span class="ico">${iconFor(e, u)}</span>
+        <span class="ico">${iconFor(e.kind, u)}</span>
         <span class="nm">${esc(cast ? e.art : u.name)}</span>
         ${cast ? `<span class="sub">${esc(u.name)} casting</span>` : ''}
         ${e.sbreak ? '<span class="tag">S-BREAK</span>' : ''}
-        ${b !== 'none' ? `<span class="chip ${BONUS[b].cls}">${BONUS[b].label}</span>` : ''}
+        ${chipHtml(b)}
       </div>`;
     }).join('');
+
     const fu = U(front.unitId);
     pill.hidden = false;
     pill.className = 'turnpill ' + (front.kind === 'cast' ? 'cast' : fu.side);
     pill.textContent = front.kind === 'cast' ? `${front.art} resolves` : `${fu.name}'s turn`;
+
+    if (pv) {
+      const what = pv.p.kind === 'resolve' ? `${esc(pv.p.name)} resolves` : esc(ACTIONS[pv.p.kind].label + (pv.p.name ? ': ' + pv.p.name : ''));
+      const nth = pv.index + 2;
+      pline.hidden = false;
+      pline.innerHTML = `<span class="tag pv">PREVIEW</span><span><b>${esc(pv.u.name)}</b> · ${what} → ${pv.cast ? 'the cast resolves' : 'next turn'} in position <b>${nth}</b>${nums ? ` (+${pv.d})` : ''}</span>${chipHtml(pv.bonus)}`;
+    } else pline.hidden = true;
+
     document.getElementById('legend').innerHTML =
       `<span style="color:var(--ally)">${ICON.shield}<span class="muted">Party</span></span>` +
       `<span style="color:var(--enemy)">${ICON.swords}<span class="muted">Enemy</span></span>` +
       `<span style="color:var(--cast)">${ICON.flame}<span class="muted">Arts resolving</span></span>`;
   }
 
-  function costBtn(kind, label, u, extra) {
-    const on = pending && pending.kind === kind ? ' on' : '';
-    return `<button class="actbtn${on}${kind === 'scraft' ? ' scraft' : ''}" data-act="${kind}"><b>${label}${extra || ''}</b><span>+${delay(S.costs[kind === 'arts' ? 'castTime' : kind] ?? 10, u.spd)}</span></button>`;
-  }
-
-  function landing(base, u, cur) {
-    const t = S.now <= cur.tick ? cur.tick + delay(base, u.spd) : 0;
-    const others = queue().filter(e => e !== cur);
-    const pos = others.filter(e => e.tick <= t).length + 1;
-    return `<p class="preview">Next turn lands at <b>+${delay(base, u.spd)}</b>, position <b>${pos}</b> in line.</p>`;
+  function actBtn(kind, u) {
+    const a = ACTIONS[kind];
+    const on = S.pending && S.pending.kind === kind ? ' on' : '';
+    const d = kind === 'custom' ? 'any delay' : '+' + delay(S.costs[a.cost], u.mod);
+    return `<button class="actbtn${on}${kind === 'scraft' ? ' scraft' : ''}" data-act="${kind}"><b>${a.label}${a.named ? '…' : ''}</b><span>${d}</span></button>`;
   }
 
   function renderAct() {
@@ -509,47 +669,48 @@ body.present h1 { font-size: 2rem; }
     const cur = queue()[0];
     if (!cur) { el.innerHTML = '<h3>Current turn</h3><p class="muted">No active combatants. Add some to start.</p>'; return; }
     const u = U(cur.unitId), b = bonusAt(S.slot), cast = cur.kind === 'cast';
-    const icoCls = cast ? 'cast' : u.side;
     let h = `<div class="panel-head"><h3>Current turn · ${S.slot + 1}</h3></div>
-      <div class="acthead"><span class="ico ${icoCls}">${iconFor(cur, u)}</span>
-        <div><div class="eyebrow">${u.side === 'ally' ? 'Party' : 'Enemy'} · SPD <span class="num">${u.spd}</span>${cur.sbreak ? ' · S-Break' : ''}</div>
+      <div class="acthead"><span class="ico ${cast ? 'cast' : u.side}">${iconFor(cur.kind, u)}</span>
+        <div><div class="eyebrow">${u.side === 'ally' ? 'Party' : 'Enemy'} · Delay mod <span class="num">${fmtMod(u.mod)}</span>${cur.sbreak ? ' · S-Break' : ''}</div>
         <h2>${esc(cast ? cur.art : u.name)}${cast ? ` <span class="muted" style="font-size:.9rem">(${esc(u.name)})</span>` : ''}</h2></div></div>`;
-    if (b !== 'none') h += `<div class="bonusnote"><span class="chip ${BONUS[b].cls}">${BONUS[b].label}</span><span>${BONUS[b].desc}</span></div>`;
+    if (b !== 'none') h += `<div class="bonusnote">${chipHtml(b)}<span>${BONUS[b].desc}</span></div>`;
     if (cast) {
-      const after = cur.after ?? S.costs.afterCast;
-      h += `<p class="muted" style="margin:0">Resolve the art at the table, then ${esc(u.name)} recovers.</p>
-        <div class="tools"><button class="btn primary" data-act="resolve">Resolve ${esc(cur.art)}</button>
-        <button class="btn warn" data-r="impede" data-id="${u.id}">Impede</button></div>${landing(after, u, cur)}`;
+      h += `<p class="muted">Resolve the art at the table, then ${esc(u.name)} recovers.</p>
+        <div class="tools">${S.pending ? '' : `<button class="btn primary" data-act="resolve">Resolve ${esc(cur.art)}</button>`}
+        <button class="btn warn" data-r="impede" data-id="${u.id}">Impede</button></div>`;
     } else {
-      h += `<div class="actions">
-        ${costBtn('attack', 'Attack', u)}${costBtn('craft', 'Craft', u, '…')}${costBtn('arts', 'Arts', u, '…')}
-        ${costBtn('item', 'Item', u)}${costBtn('move', 'Move', u)}${costBtn('defend', 'Defend', u)}
-        ${costBtn('scraft', 'S-Craft', u, '…')}
-        <button class="actbtn${pending && pending.kind === 'custom' ? ' on' : ''}" data-act="custom"><b>Custom…</b><span>any delay</span></button>
-      </div>`;
-      if (pending) {
-        const p = pending;
-        const nameLbl = { craft: 'Craft name', arts: 'Art name', scraft: 'S-Craft name', custom: 'Action' }[p.kind];
-        h += `<form class="form" id="pendForm">
-          <label class="grow">${nameLbl}<input type="text" id="f-name" value="${esc(p.name || '')}" ${p.kind === 'arts' ? 'list="artsList"' : ''} autocomplete="off"></label>
-          <label>${p.kind === 'arts' ? 'Cast time' : 'Delay'}<input type="number" id="f-base" min="0" max="99" value="${p.base}"></label>
+      h += `<div class="actions">${['attack', 'craft', 'arts', 'item', 'move', 'defend', 'scraft', 'custom'].map(k => actBtn(k, u)).join('')}</div>`;
+    }
+    const pv = preview();
+    if (pv) {
+      const p = pv.p, a = ACTIONS[p.kind];
+      h += `<form class="confirm" id="pendForm">
+        <div class="eyebrow">Confirm ${p.kind === 'resolve' ? 'resolve' : a.label}</div>
+        ${p.kind === 'resolve' ? '' : `<div class="fields">
+          ${a.named ? `<label class="grow">${a.named}<input type="text" id="f-name" value="${esc(p.name || '')}" ${p.kind === 'arts' ? 'list="artsList"' : ''} autocomplete="off"></label>` : ''}
+          <label>${p.kind === 'arts' ? 'Cast time' : 'Base delay'}<input type="number" id="f-base" min="0" max="99" value="${p.base}"></label>
           ${p.kind === 'arts' ? `<label>After-cast<input type="number" id="f-after" min="0" max="99" value="${p.after}"></label>` : ''}
-          <button class="btn primary" type="submit">${p.kind === 'arts' ? 'Start casting' : 'Confirm'}</button>
+        </div>`}
+        <div class="landing" id="landing">${landingHtml(pv)}</div>
+        <div class="tools">
+          <button class="btn primary" type="submit" id="f-confirm">${p.kind === 'arts' ? 'Start casting' : 'Confirm'}</button>
           <button class="btn ghost" type="button" data-act="cancel">Cancel</button>
-        </form>${landing(p.base, u, cur)}`;
-      }
+        </div>
+      </form>`;
     }
     el.innerHTML = h;
-    const nm = document.getElementById('f-name'); if (nm && !nm.value) nm.focus();
+  }
+  function landingHtml(pv) {
+    return `<span><span class="k">Lands</span> <span class="v">+${pv.d}</span></span>
+      <span><span class="k">Position</span> <span class="v">${pv.index + 2}</span></span>
+      <span><span class="k">Bonus</span> ${pv.bonus !== 'none' ? chipHtml(pv.bonus) : '<span class="muted">none</span>'}</span>`;
   }
 
   function renderRoster() {
     const q = queue(), front = q[0];
     const order = new Map(q.map((e, i) => [e.unitId, i]));
-    const rows = S.units.slice().sort((a, b) => {
-      const ai = order.has(a.id) ? order.get(a.id) : 999, bi = order.has(b.id) ? order.get(b.id) : 999;
-      return ai - bi;
-    }).map(u => {
+    const st = S.settings;
+    const rows = S.units.slice().sort((a, b) => (order.has(a.id) ? order.get(a.id) : 999) - (order.has(b.id) ? order.get(b.id) : 999)).map(u => {
       const e = E(u.id);
       const isCur = front && front.unitId === u.id;
       let status;
@@ -560,7 +721,7 @@ body.present h1 { font-size: 2rem; }
       return `<tr class="${u.ko ? 'ko' : ''} ${isCur ? 'current' : ''}">
         <td><span class="sideicon ${u.side}" title="${u.side === 'ally' ? 'Party' : 'Enemy'}">${u.side === 'ally' ? ICON.shield : ICON.swords}</span></td>
         <td><input class="nameinput" type="text" id="name-${u.id}" value="${esc(u.name)}" data-uf="name" data-id="${u.id}" aria-label="Name"></td>
-        <td><input type="number" id="spd-${u.id}" value="${u.spd}" min="1" max="99" data-uf="spd" data-id="${u.id}" aria-label="SPD"></td>
+        <td><input type="number" id="mod-${u.id}" value="${u.mod}" min="${st.modMin}" max="${st.modMax}" step="1" data-uf="mod" data-id="${u.id}" aria-label="Delay modifier"></td>
         <td class="status">${status}</td>
         <td><div class="rowbtns">
           <button class="btn small" data-r="hasten" data-id="${u.id}" title="Hasten by the delay step" ${u.ko || isCur ? 'disabled' : ''}>−</button>
@@ -572,136 +733,310 @@ body.present h1 { font-size: 2rem; }
         </div></td></tr>`;
     }).join('');
     document.getElementById('roster').innerHTML =
-      `<thead><tr><th></th><th>Name</th><th>SPD</th><th>Next</th><th>Controls</th></tr></thead><tbody>${rows ||
+      `<thead><tr><th></th><th>Name</th><th title="Delay modifier">Mod</th><th>Next</th><th>Controls</th></tr></thead><tbody>${rows ||
       '<tr><td colspan="5" class="muted">No combatants yet.</td></tr>'}</tbody>`;
   }
 
   function renderSettings() {
     const st = S.settings;
-    document.getElementById('set-show').value = st.show;
-    document.getElementById('showVal').textContent = st.show;
-    document.getElementById('set-rate').value = st.rate;
-    document.getElementById('rateVal').textContent = st.rate + '%';
-    document.getElementById('set-numbers').checked = !!st.numbers;
-    document.getElementById('set-step').value = st.step;
-    document.getElementById('costs').innerHTML = Object.keys(COST_LABELS).map(k =>
+    const set = (id, v) => { const el = document.getElementById(id); if (el && document.activeElement !== el) { if (el.type === 'checkbox') el.checked = !!v; else el.value = v; } };
+    set('set-show', st.show); document.getElementById('showVal').textContent = st.show;
+    set('set-rate', st.rate); document.getElementById('rateVal').textContent = st.rate + '%';
+    set('set-numbers', st.numbers); set('set-step', st.step);
+    set('set-mode', st.mode); set('set-pct', st.pct); set('set-modmin', st.modMin); set('set-modmax', st.modMax);
+    document.getElementById('pctWrap').hidden = st.mode !== 'pct';
+    const base = S.costs.attack;
+    const mods = [];
+    for (let m = st.modMin; m <= st.modMax; m++) mods.push(`<b>${fmtMod(m)}</b> → ${delay(base, m)}`);
+    document.getElementById('modExample').innerHTML = `Attack (base ${base}): ${mods.join(' · ')}. ` +
+      (st.mode === 'pct' ? `Each point changes every delay by ${st.pct}%.` : 'Each point adds or removes 1 from every delay.') + ' Delays never drop below 1.';
+    const costs = document.getElementById('costs');
+    if (!costs.contains(document.activeElement)) costs.innerHTML = Object.keys(COST_LABELS).map(k =>
       `<label>${COST_LABELS[k]}<input type="number" id="cost-${k}" min="0" max="99" value="${S.costs[k]}" data-cost="${k}"></label>`).join('');
     document.getElementById('undoBtn').disabled = !undoStack.length;
   }
 
+  function logHtml(nums, limit) {
+    const items = S.log.slice(-limit).reverse();
+    if (!items.length) return '<li class="empty">Nothing has happened yet.</li>';
+    return items.map(l => {
+      const d = nums && l.d != null ? ` (${l.d > 0 ? '+' : '−'}${Math.abs(l.d)})` : '';
+      return `<li><span class="t">${l.t ? '#' + l.t : ''}</span><span>${esc(l.text)}${d}</span>${chipHtml(l.bonus)}</li>`;
+    }).join('');
+  }
   function renderLog() {
-    document.getElementById('log').innerHTML = S.log.slice(-60).reverse().map(l =>
-      `<li><span class="t">${l.t ? '#' + l.t : ''}</span><span>${esc(l.text)}</span>${l.bonus && BONUS[l.bonus] ? `<span class="chip ${BONUS[l.bonus].cls}">${BONUS[l.bonus].label}</span>` : ''}</li>`).join('');
+    if (!PLAYER) document.getElementById('log').innerHTML = logHtml(true, 80);
+    document.getElementById('plog').innerHTML = logHtml(S.settings.numbers, 12);
   }
 
-  function render() { renderTimeline(); renderAct(); renderRoster(); renderSettings(); renderLog(); }
+  function render() {
+    if (!S) return;
+    renderTimeline(); renderLog();
+    if (!PLAYER) { renderAct(); renderRoster(); renderSettings(); renderShare(); }
+  }
+
+  /* ---------- live sync (Firebase Realtime Database) ---------- */
+  const FB_VER = '10.12.2';
+  function loadScript(src) {
+    return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('Could not load ' + src)); document.head.appendChild(s); });
+  }
+  function firebaseAdapter(cfg) {
+    let db = null, ready = null;
+    const init = () => ready || (ready = (async () => {
+      const base = `https://www.gstatic.com/firebasejs/${FB_VER}/`;
+      await loadScript(base + 'firebase-app-compat.js');
+      await Promise.all([loadScript(base + 'firebase-auth-compat.js'), loadScript(base + 'firebase-database-compat.js')]);
+      if (!firebase.apps.length) firebase.initializeApp(cfg);
+      db = firebase.database();
+    })());
+    return {
+      async signIn() { await init(); const c = await firebase.auth().signInAnonymously(); return c.user.uid; },
+      async claim(code, uid) {
+        await init();
+        const ref = db.ref('owners/' + code);
+        const snap = await ref.get();
+        if (!snap.exists()) { await ref.set(uid); return true; }
+        return snap.val() === uid;
+      },
+      async write(code, str) { await init(); await db.ref('tables/' + code).set({ state: str, at: firebase.database.ServerValue.TIMESTAMP }); },
+      async subscribe(code, cb) { await init(); db.ref('tables/' + code).on('value', s => { const v = s.val(); cb(v && v.state ? v.state : null); }); },
+      async onConnection(cb) { await init(); db.ref('.info/connected').on('value', s => cb(!!s.val())); }
+    };
+  }
+  const CFG = window.ATB_FIREBASE && window.ATB_FIREBASE.apiKey && window.ATB_FIREBASE.databaseURL ? window.ATB_FIREBASE : null;
+  const adapter = window.ATB_SYNC_ADAPTER || (CFG ? firebaseAdapter(CFG) : null);
+
+  const Sync = {
+    status: 'off', code: null, error: '', timer: null, connected: true,
+    async goLive(code) {
+      if (!adapter) return;
+      this.status = 'connecting'; this.error = ''; renderShare();
+      try {
+        const uid = await adapter.signIn();
+        code = code || genCode();
+        let ok = await adapter.claim(code, uid);
+        if (!ok) { code = genCode(); ok = await adapter.claim(code, uid); }
+        if (!ok) throw new Error('claim');
+        this.code = code; this.status = 'live';
+        try { localStorage.setItem(LIVE_KEY, code); } catch (e) {}
+        adapter.onConnection(c => { this.connected = c; renderShare(); });
+        this.push(true);
+      } catch (err) {
+        this.status = 'error';
+        this.error = /permission|denied/i.test(String(err && (err.code || err.message))) ?
+          'Firebase refused the connection. Check that Anonymous sign-in is turned on and the database rules from the README are published.' :
+          'Could not reach Firebase. Check your internet connection and the settings in config.js, then try again.';
+        console.error(err);
+      }
+      renderShare();
+    },
+    stop() {
+      this.status = 'off'; this.code = null;
+      try { localStorage.removeItem(LIVE_KEY); } catch (e) {}
+      renderShare();
+    },
+    push(now) {
+      if (this.status !== 'live' || !adapter) return;
+      clearTimeout(this.timer);
+      const send = () => adapter.write(this.code, JSON.stringify(S)).catch(err => { console.error(err); this.status = 'error'; this.error = 'An update did not reach players. Press Reconnect.'; renderShare(); });
+      if (now) send(); else this.timer = setTimeout(send, 120);
+    }
+  };
+  function genCode() {
+    const abc = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    let s = ''; const r = new Uint32Array(6);
+    (window.crypto || {}).getRandomValues ? crypto.getRandomValues(r) : r.forEach((_, i) => r[i] = Math.random() * 1e9);
+    r.forEach(n => s += abc[n % abc.length]);
+    return s;
+  }
+  function playerUrl(code) { return location.origin + location.pathname + '?t=' + code; }
+
+  let qrFor = null;
+  function renderShare() {
+    if (PLAYER) return;
+    const el = document.getElementById('sharePanel');
+    const badge = document.getElementById('gmLive');
+    badge.hidden = Sync.status !== 'live';
+    badge.className = 'livebadge ' + (Sync.connected ? 'on' : 'bad');
+    badge.textContent = Sync.connected ? 'Live · ' + Sync.code : 'Reconnecting';
+    let h = `<h3>Players' phones</h3>`;
+    if (!adapter) {
+      h += `<p class="help">Live sharing isn't set up on this copy yet. Add your Firebase settings to <span class="num">config.js</span> (steps in the README), and a Share button will appear here.</p>`;
+      el.innerHTML = h; qrFor = null; return;
+    }
+    if (Sync.status === 'off') {
+      h += `<p class="help">Players open a link on their phones and watch the timeline and battle log update as you play. They can't change anything.</p>
+        <div><button class="btn primary" data-cmd="golive">Share with players</button></div>`;
+    } else if (Sync.status === 'connecting') {
+      h += `<p class="muted">Connecting…</p>`;
+    } else if (Sync.status === 'error') {
+      h += `<p class="errtext">${esc(Sync.error)}</p><div class="tools"><button class="btn primary" data-cmd="golive">Reconnect</button><button class="btn ghost" data-cmd="stoplive">Stop sharing</button></div>`;
+    } else {
+      const url = playerUrl(Sync.code);
+      h += `<div class="sharebody">
+        <div class="qr" id="qr" aria-label="QR code for the player link"></div>
+        <div>
+          <span class="muted" style="font-size:.85rem">Table code</span>
+          <span class="code">${Sync.code}</span>
+          <div class="sharelink"><input type="text" id="share-url" readonly value="${esc(url)}" aria-label="Player link"><button class="btn small" data-cmd="copy">Copy</button></div>
+          <div class="tools"><button class="btn small" data-cmd="newcode">New table code</button><button class="btn small ghost" data-cmd="stoplive">Stop sharing</button></div>
+        </div></div>`;
+    }
+    el.innerHTML = h;
+    if (Sync.status === 'live') {
+      const qr = document.getElementById('qr');
+      if (window.QRCode) { try { new QRCode(qr, { text: playerUrl(Sync.code), width: 148, height: 148, colorDark: '#0a0d0f', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M }); } catch (e) { qr.hidden = true; } }
+      else qr.hidden = true;
+    }
+  }
+
+  /* ---------- player (phone) mode ---------- */
+  function startPlayer() {
+    document.body.classList.add('present', 'player');
+    const notice = document.getElementById('notice');
+    const badge = document.getElementById('playerLive');
+    const board = document.getElementById('board'), plog = document.getElementById('plogWrap');
+    const show = (msg) => { notice.hidden = !msg; notice.textContent = msg || ''; board.hidden = !!msg; plog.hidden = !!msg; };
+    if (!adapter) { show('This copy of the tracker is not connected to a live table.'); return; }
+    show(`Connecting to table ${PLAYER_CODE}…`);
+    badge.hidden = false; badge.className = 'livebadge'; badge.textContent = PLAYER_CODE;
+    adapter.subscribe(PLAYER_CODE, str => {
+      if (!str) { show(`Table ${PLAYER_CODE} hasn't started yet. Keep this page open; it updates when the GM starts sharing.`); return; }
+      try { S = normalize(JSON.parse(str)); } catch (e) { return; }
+      show('');
+      render();
+    }).catch(err => { console.error(err); show('Could not connect to the table. Check your connection and reload.'); });
+    adapter.onConnection(c => { badge.className = 'livebadge ' + (c ? 'on' : 'bad'); badge.textContent = (c ? 'Live · ' : 'Reconnecting · ') + PLAYER_CODE; }).catch(() => {});
+  }
 
   /* ---------- events ---------- */
   document.addEventListener('click', ev => {
-    const t = ev.target.closest('[data-act],[data-r],[data-cmd],.slot');
+    if (PLAYER) { const f = ev.target.closest('[data-cmd="fullscreen"]'); if (f) fullscreen(); return; }
+    const t = ev.target.closest('[data-act],[data-r],[data-cmd],.slot[data-slot]');
     if (!t) return;
     if (t.dataset.act) {
-      const k = t.dataset.act;
-      if (k === 'resolve') return act('resolve');
-      if (k === 'cancel') { pending = null; return renderAct(); }
-      if (k === 'craft') { pending = { kind: 'craft', name: '', base: S.costs.craft }; return renderAct(); }
-      if (k === 'arts') { pending = { kind: 'arts', name: '', base: S.costs.castTime, after: S.costs.afterCast }; return renderAct(); }
-      if (k === 'scraft') { pending = { kind: 'scraft', name: '', base: S.costs.scraft }; return renderAct(); }
-      if (k === 'custom') { pending = { kind: 'custom', name: '', base: S.costs.attack }; return renderAct(); }
-      return act(k);
+      if (t.dataset.act === 'cancel') return cancelPending();
+      return choose(t.dataset.act);
     }
     if (t.dataset.r) return rosterCmd(t.dataset.r, t.dataset.id);
     if (t.dataset.cmd) {
       const c = t.dataset.cmd;
       if (c === 'undo') return undo();
       if (c === 'newbattle') return newBattle();
-      if (c === 'present') { document.body.classList.toggle('present'); lastFront = null; return renderTimeline(); }
-      if (c === 'fullscreen') {
-        try { const p = document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+      if (c === 'present') { document.body.classList.toggle('present'); lastFront = null; return render(); }
+      if (c === 'fullscreen') return fullscreen();
+      if (c === 'reroll') { snapshot(); S.seed = (Math.random() * 2 ** 31) | 0; S.overrides = {}; addLog('Upcoming AT bonuses rerolled'); return commit(); }
+      if (c === 'reset') { snapshot(); S = sample(); return commit(); }
+      if (c === 'golive') return Sync.goLive(Sync.code || readLiveCode());
+      if (c === 'newcode') return Sync.goLive(null);
+      if (c === 'stoplive') return Sync.stop();
+      if (c === 'copy') {
+        const inp = document.getElementById('share-url');
+        const done = () => { t.textContent = 'Copied'; setTimeout(() => { t.textContent = 'Copy'; }, 1400); };
+        try { navigator.clipboard.writeText(inp.value).then(done, () => { inp.select(); }); } catch (e) { inp.select(); }
         return;
       }
-      if (c === 'reroll') { snapshot(); S.seed = (Math.random() * 2 ** 31) | 0; const keep = {}; S.overrides = keep; addLog('Upcoming AT bonuses rerolled'); return commit(); }
-      if (c === 'reset') { snapshot(); S = sample(); pending = null; return commit(); }
     }
-    if (t.classList.contains('slot') && !document.body.classList.contains('present')) cycleBonus(Number(t.dataset.slot));
+    if (t.classList.contains('slot') && !isPresent()) cycleBonus(Number(t.dataset.slot));
   });
+  function fullscreen() {
+    try { const p = document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+  }
   document.addEventListener('keydown', ev => {
+    if (PLAYER) return;
     const inField = /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName);
     if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 'z' && !inField) { ev.preventDefault(); undo(); }
+    if (ev.key === 'Escape' && S.pending) { ev.preventDefault(); cancelPending(); }
     if ((ev.key === 'Enter' || ev.key === ' ') && document.activeElement.classList.contains('slot')) { ev.preventDefault(); cycleBonus(Number(document.activeElement.dataset.slot)); }
   });
 
   function cycleBonus(slot) {
     snapshot();
     const order = ['none'].concat(BONUS_KEYS);
-    const cur = bonusAt(slot);
-    S.overrides[slot] = order[(order.indexOf(cur) + 1) % order.length];
-    lastFront = lastFront; commit();
+    S.overrides[slot] = order[(order.indexOf(bonusAt(slot)) + 1) % order.length];
+    commit();
     const el = document.querySelector(`.slot[data-slot="${slot}"]`); if (el) el.focus();
   }
-
   function undo() {
     if (!undoStack.length) return;
-    S = JSON.parse(undoStack.pop()); pending = null; save(); render();
+    S = JSON.parse(undoStack.pop()); commit();
   }
 
   document.addEventListener('submit', ev => {
     ev.preventDefault();
-    if (ev.target.id === 'pendForm' && pending) {
-      const name = document.getElementById('f-name').value.trim();
-      const base = Math.max(0, Number(document.getElementById('f-base').value) || 0);
-      const afterEl = document.getElementById('f-after');
-      act(pending.kind, { name, base, after: afterEl ? Math.max(0, Number(afterEl.value) || 0) : undefined });
-    } else if (ev.target.id === 'addForm') {
+    if (PLAYER) return;
+    if (ev.target.id === 'pendForm') return confirmPending();
+    if (ev.target.id === 'addForm') {
       const name = document.getElementById('add-name').value.trim(); if (!name) return;
       const side = document.getElementById('add-side').value;
-      const spd = Math.max(1, Number(document.getElementById('add-spd').value) || 20);
+      const mod = clampMod(document.getElementById('add-mod').value);
       const now = document.getElementById('add-now').checked;
       snapshot();
       const id = 'u' + (S.idN++);
-      S.units.push({ id, name, side, spd });
+      S.units.push({ id, name, side, mod });
       const front = queue()[0];
       const e = { unitId: id, kind: 'turn', seq: ++S.seqN };
-      if (front && now) { e.tick = front.tick; e.seq = front.seq + 0.001; }
-      else e.tick = (front ? front.tick : S.now) + delay(S.costs.attack, spd);
+      if (front && now) { e.tick = front.tick; e.seq = front.seq + 0.001; S.pending = null; }
+      else e.tick = (front ? front.tick : S.now) + delay(S.costs.attack, mod);
       S.entries.push(e);
       addLog(`${name} joins the battle`);
       document.getElementById('add-name').value = '';
       commit();
     }
   });
+  const clampMod = v => Math.max(S.settings.modMin, Math.min(S.settings.modMax, Math.round(Number(v) || 0)));
 
   document.addEventListener('input', ev => {
+    if (PLAYER) return;
     const t = ev.target;
-    if (t.id === 'f-base' || t.id === 'f-name' || t.id === 'f-after') {
-      if (!pending) return;
-      if (t.id === 'f-name') pending.name = t.value;
-      if (t.id === 'f-base') { pending.base = Math.max(0, Number(t.value) || 0); updatePreview(); }
-      if (t.id === 'f-after') pending.after = Math.max(0, Number(t.value) || 0);
+    if (S.pending && (t.id === 'f-name' || t.id === 'f-base' || t.id === 'f-after')) {
+      if (t.id === 'f-name') S.pending.name = t.value;
+      if (t.id === 'f-base') S.pending.base = Math.max(0, Number(t.value) || 0);
+      if (t.id === 'f-after') S.pending.after = Math.max(0, Number(t.value) || 0);
+      save(); renderTimeline();
+      const pv = preview(), land = document.getElementById('landing');
+      if (pv && land) land.innerHTML = landingHtml(pv);
+      return;
     }
     if (t.dataset.set === 'show' || t.dataset.set === 'rate') {
-      S.settings[t.dataset.set] = Number(t.value); save(); renderTimeline(); renderAct(); renderSettings();
+      S.settings[t.dataset.set] = Number(t.value); save(); render();
     }
   });
-  function updatePreview() {
-    const cur = queue()[0]; const pv = document.querySelector('#actPanel .preview');
-    if (cur && pv && pending) pv.outerHTML = landing(pending.base, U(cur.unitId), cur);
-  }
 
   document.addEventListener('change', ev => {
-    const t = ev.target;
+    if (PLAYER) return;
+    const t = ev.target, st = S.settings;
     if (t.dataset.uf) {
       const u = U(t.dataset.id); if (!u) return;
       snapshot();
       if (t.dataset.uf === 'name') { const v = t.value.trim(); if (v) u.name = v; }
-      if (t.dataset.uf === 'spd') u.spd = Math.max(1, Math.min(99, Number(t.value) || u.spd));
-      commit();
-    } else if (t.dataset.set === 'numbers') { S.settings.numbers = t.checked; save(); renderTimeline(); }
-    else if (t.dataset.set === 'step') { S.settings.step = Math.max(1, Number(t.value) || 1); save(); }
-    else if (t.dataset.cost) { snapshot(); S.costs[t.dataset.cost] = Math.max(0, Number(t.value) || 0); commit(); }
+      if (t.dataset.uf === 'mod') u.mod = clampMod(t.value);
+      return commit();
+    }
+    const k = t.dataset.set;
+    if (k === 'numbers') { st.numbers = t.checked; return commit(); }
+    if (k === 'step') { st.step = Math.max(1, Number(t.value) || 1); return save(); }
+    if (k === 'mode') { snapshot(); st.mode = t.value; return commit(); }
+    if (k === 'pct') { snapshot(); st.pct = Number(t.value) || 10; return commit(); }
+    if (k === 'modMin' || k === 'modMax') {
+      snapshot();
+      st.modMin = Math.min(0, Math.max(-9, Math.round(Number(document.getElementById('set-modmin').value) || 0)));
+      st.modMax = Math.max(0, Math.min(9, Math.round(Number(document.getElementById('set-modmax').value) || 0)));
+      S.units.forEach(u => { u.mod = clampMod(u.mod); });
+      return commit();
+    }
+    if (t.dataset.cost) { snapshot(); S.costs[t.dataset.cost] = Math.max(0, Number(t.value) || 0); return commit(); }
   });
 
-  render();
+  function readLiveCode() { try { return localStorage.getItem(LIVE_KEY); } catch (e) { return null; } }
+
+  if (PLAYER) startPlayer();
+  else {
+    render();
+    const code = readLiveCode();
+    if (code && adapter) Sync.goLive(code);
+  }
 })();
 </script>
-</body></html>
+</body>
+</html>
