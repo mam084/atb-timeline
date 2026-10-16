@@ -261,6 +261,42 @@ body.present .turnpill { font-size: 1.2rem; }
 body.present h1 { font-size: 1.9rem; }
 body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 
+/* Party resources (HP / EP / CP) */
+.party { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.partygrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.pcard { border: 1px solid var(--line); border-radius: 12px; background: var(--bg); padding: 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.pcard.current { border-color: var(--accent); background: var(--accent-tint); }
+.pcard.ko { opacity: .55; }
+.pcard .pname { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-family: var(--font-display); font-weight: 600; font-size: 1rem; }
+.pcard .pname .tags { justify-content: flex-end; }
+.res { display: grid; grid-template-columns: 2.2em minmax(0, 1fr) auto; align-items: center; gap: 8px; font-size: .82rem; }
+.res .rk { font-family: var(--font-display); font-weight: 700; letter-spacing: .08em; font-size: .74rem; color: var(--muted); }
+.res .rv { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bar { position: relative; height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.bar > i { position: absolute; inset: 0 auto 0 0; border-radius: 999px; transition: width .25s ease-out; }
+.bar.hp > i { background: var(--ally); }
+.bar.hp.low > i { background: var(--enemy); }
+.bar.ep > i { background: var(--blue); }
+.bar.cp > i { background: var(--gold); }
+.bar.cp::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: var(--bg); }
+.pedit { display: grid; grid-template-columns: 2.2em repeat(2, minmax(0, 1fr)); gap: 6px; align-items: center; font-size: .76rem; }
+.pedit input[type="number"] { width: 100%; padding: 4px 6px; font-size: .84rem; }
+.pedit .rk { font-family: var(--font-display); font-weight: 700; letter-spacing: .08em; font-size: .72rem; color: var(--muted); }
+.pedit .hd { color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .1em; }
+.qbtns { display: flex; flex-wrap: wrap; gap: 4px; }
+.tag.ready { color: var(--gold); }
+.tag.linked { color: var(--blue); }
+.tag.ko { color: var(--enemy); }
+.ame { border: 1px solid var(--accent); border-radius: 14px; background: var(--surface); padding: 16px 18px; flex-direction: column; gap: 14px; }
+.ame.myturn { background: var(--accent-tint); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 15%, transparent); }
+.ame .big { font-family: var(--font-display); font-size: 1.35rem; font-weight: 600; }
+.ame .res { grid-template-columns: 2.4em minmax(0, 1fr) auto; font-size: .95rem; }
+.ame .bar { height: 12px; }
+.ame .amount { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ame .amount input { width: 6em; font-size: 1.1rem; }
+.ame .grp { display: flex; flex-direction: column; gap: 8px; }
+.ame .grp .qbtns .btn { padding: 9px 12px; font-size: .9rem; }
+
 @media (min-width: 900px) {
   .timeline, body.present .timeline { grid-template-columns: repeat(var(--n, 10), minmax(0, 1fr)); }
 }
@@ -306,6 +342,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
   <div class="notice" id="notice" hidden></div>
 
   <section class="me player-only dnd-only" id="mePanel" aria-label="Your character"></section>
+  <section class="ame player-only atb-only" id="atbMe" aria-label="Your character"></section>
 
   <section class="board dnd-only" id="dboard" aria-label="Initiative order">
     <div class="board-head">
@@ -328,6 +365,8 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       <span class="gm">Click a slot to change its AT bonus.</span>
     </div>
   </section>
+
+  <section class="party atb-only" id="party" aria-label="Party" hidden></section>
 
   <section class="plog present-only" id="plogWrap" aria-label="Battle log">
     <h3>Battle log</h3>
@@ -387,6 +426,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
         <div class="row">
           <label>How it applies
             <select id="set-mode" data-set="mode">
+              <option value="rate">Turn rate (each point = same % more or fewer turns)</option>
               <option value="pct">Proportional (× base delay)</option>
               <option value="flat">Flat (+ / − to base delay)</option>
             </select>
@@ -412,6 +452,9 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
         <div><button class="btn small" data-cmd="reroll">Reroll upcoming bonuses</button></div>
         <h3>Base delay for each action</h3>
         <div class="costs" id="costs"></div>
+        <h3>CP and EP</h3>
+        <div class="costs" id="gains"></div>
+        <p class="help">CP caps at 200. S-Crafts and S-Breaks need 100 CP and use it all; at 200 CP the S-Craft is empowered. Crafts and arts spend their CP/EP cost when you confirm them, and HEAL / EP / CP bonuses apply to whoever takes that turn.</p>
         <div class="help">
           <p>AT bonuses belong to timeline positions, not to people. Delaying or hastening a unit moves it onto a different bonus.</p>
         </div>
@@ -469,15 +512,23 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
   };
   const COST_LABELS = { attack: 'Attack', craft: 'Craft', castTime: 'Arts cast', afterCast: 'Arts after-cast', item: 'Item', move: 'Move', defend: 'Defend', scraft: 'S-Craft' };
   const DEF_COSTS = { attack: 10, craft: 12, castTime: 6, afterCast: 8, item: 8, move: 6, defend: 8, scraft: 16 };
-  const DEF_SETTINGS = { show: 12, rate: 30, numbers: false, step: 3, mode: 'pct', pct: 10, modMin: -2, modMax: 2 };
+  const DEF_SETTINGS = { show: 12, rate: 30, numbers: false, step: 3, mode: 'rate', pct: 10, modMin: -2, modMax: 2 };
+  /* CP and EP rules (see the rulebook): CP caps at 200, S-Crafts need 100 and use it all, 200 = empowered. */
+  const CP_CAP = 200, S_MIN = 100;
+  const DEF_GAINS = { hit: 10, crit: 5, hurt: 5, big: 15, craft: 20 };
+  const GAIN_LABELS = { hit: 'CP: landed a hit', crit: 'CP: crit (extra)', hurt: 'CP: took a hit', big: 'CP: big hit (25%+)', craft: 'Default craft cost' };
+  const GAIN_TEXT = { hit: 'landed a hit', crit: 'crit', hurt: 'took a hit', big: 'took a big hit' };
+  const RES = { hp: 'HP', ep: 'EP', cp: 'CP' };
+  const r1 = n => Math.round(Number(n) * 10) / 10;
+  const fmtT = n => String(r1(n));
 
   function sample() {
     const units = [
-      { id: 'u1', name: 'Estelle', side: 'ally', mod: 0 },
+      { id: 'u1', name: 'Estelle', side: 'ally', mod: 0, hp: 92, hpMax: 110, ep: 30, epMax: 40, cp: 60 },
       { id: 'u2', name: 'Goblin', side: 'enemy', mod: 1 },
-      { id: 'u3', name: 'Joshua', side: 'ally', mod: -2 },
-      { id: 'u4', name: 'Kloe', side: 'ally', mod: 0 },
-      { id: 'u5', name: 'Schera', side: 'ally', mod: -1 },
+      { id: 'u3', name: 'Joshua', side: 'ally', mod: -2, hp: 84, hpMax: 84, ep: 28, epMax: 36, cp: 120 },
+      { id: 'u4', name: 'Kloe', side: 'ally', mod: 0, hp: 41, hpMax: 66, ep: 70, epMax: 80, cp: 25 },
+      { id: 'u5', name: 'Schera', side: 'ally', mod: -1, hp: 70, hpMax: 72, ep: 55, epMax: 64, cp: 200 },
       { id: 'u6', name: 'Knight', side: 'enemy', mod: 2 }
     ];
     const ticks = [0, 3, 5, 7, 9, 11];
@@ -488,6 +539,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       overrides: { 0: 'none', 1: 'crit', 2: 'none', 3: 'none', 4: 'hp10', 5: 'none' },
       costs: Object.assign({}, DEF_COSTS),
       settings: Object.assign({}, DEF_SETTINGS),
+      gains: Object.assign({}, DEF_GAINS),
       pending: null,
       log: [{ t: 0, text: 'Sample encounter loaded. Edit the roster or press New battle.' }]
     };
@@ -496,7 +548,11 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     if (!s || !Array.isArray(s.units)) return sample();
     s.costs = Object.assign({}, DEF_COSTS, s.costs);
     s.settings = Object.assign({}, DEF_SETTINGS, s.settings);
-    s.units.forEach(u => { if (typeof u.mod !== 'number') u.mod = 0; });
+    s.gains = Object.assign({}, DEF_GAINS, s.gains);
+    s.units.forEach(u => {
+      if (typeof u.mod !== 'number') u.mod = 0;
+      if (u.side === 'ally') ['hp', 'hpMax', 'ep', 'epMax', 'cp'].forEach(k => { if (typeof u[k] !== 'number' || !isFinite(u[k])) u[k] = 0; });
+    });
     s.overrides = s.overrides || {};
     s.log = s.log || [];
     if (s.pending === undefined) s.pending = null;
@@ -524,12 +580,45 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
   const cmp = (a, b) => a.tick - b.tick || a.seq - b.seq;
   function queue() { return S.entries.filter(e => { const u = U(e.unitId); return u && !u.ko; }).sort(cmp); }
 
-  /* Delay = base delay adjusted by the character's modifier. */
+  /* Delay = base delay adjusted by the character's modifier (negative = faster).
+     rate: each point changes how many turns you get by the same amount, so stacking speed never snowballs
+           (at 10%: −2 → ×0.83 = 20% more turns, +2 → ×1.25 = 20% fewer). Kept to one decimal.
+     pct:  each point changes the delay itself by a fixed %. flat: each point adds or removes 1. */
   function delay(base, mod) {
     base = Number(base) || 0; mod = Number(mod) || 0;
     const st = S.settings;
+    if (st.mode === 'rate') return Math.max(1, r1(base * 100 / Math.max(10, 100 - mod * st.pct)));
     const v = st.mode === 'flat' ? base + mod : base * (1 + mod * st.pct / 100);
     return Math.max(1, Math.round(v));
+  }
+
+  /* ---------- party resources ---------- */
+  const tracked = u => !!u && u.side === 'ally';
+  function clampRes(u, k, v) {
+    v = Math.round(Number(v) || 0);
+    const max = k === 'cp' ? CP_CAP : u[k + 'Max'];
+    return Math.max(0, max > 0 ? Math.min(max, v) : v);
+  }
+  /* Change one resource by a signed amount; returns the amount actually applied. */
+  function bump(u, k, d) {
+    if (!tracked(u)) return 0;
+    const before = u[k];
+    u[k] = clampRes(u, k, before + d);
+    if (k === 'hp' && u.hp === 0 && before > 0 && u.hpMax > 0 && !u.ko) { u.ko = true; addLog(`${u.name} is knocked out`); }
+    return u[k] - before;
+  }
+  const resText = (u, k) => k === 'cp' ? `${u.cp} CP` : `${RES[k]} ${u[k]}${u[k + 'Max'] ? '/' + u[k + 'Max'] : ''}`;
+  /* The AT bonus a unit lands on: heal / EP / CP bonuses apply on their own; CRIT is still called at the table. */
+  function applyBonus(u, b) {
+    if (!tracked(u) || !b || b === 'none') return;
+    const pct = { hp10: ['hp', .1], hp50: ['hp', .5], ep10: ['ep', .1], ep50: ['ep', .5] }[b];
+    if (pct && u[pct[0] + 'Max'] > 0) bump(u, pct[0], Math.ceil(u[pct[0] + 'Max'] * pct[1]));
+    if (b === 'cp20') bump(u, 'cp', 20);
+    if (b === 'cp50') bump(u, 'cp', 50);
+  }
+  function keepPendingValid() {
+    const nf = queue()[0];
+    if (S.pending && (!nf || nf.unitId !== S.pending.unitId)) S.pending = null;
   }
   const fmtMod = m => (m > 0 ? '+' : m < 0 ? '−' : '±') + Math.abs(m);
 
@@ -583,6 +672,8 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     } else {
       S.pending = prev || { unitId: cur.unitId, kind, name: '', base: S.costs[ACTIONS[kind].cost] };
       if (kind === 'arts' && S.pending.after == null) S.pending.after = S.costs.afterCast;
+      if (kind === 'arts' && S.pending.ep == null) S.pending.ep = 0;
+      if (kind === 'craft' && S.pending.cp == null) S.pending.cp = S.gains.craft;
     }
     save(); render();
     const f = document.getElementById('f-name') || document.getElementById('f-confirm');
@@ -590,16 +681,36 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
   }
   function cancelPending() { if (!S.pending) return; S.pending = null; save(); render(); }
 
+  /* What the pending action costs, and whether the acting character can pay it (counting this turn's CP/EP bonus). */
+  function costCheck(p, u) {
+    if (!p || !tracked(u)) return { ok: true };
+    const b = bonusAt(S.slot);
+    const cpBonus = b === 'cp20' ? 20 : b === 'cp50' ? 50 : 0;
+    const epBonus = b === 'ep10' ? Math.ceil(u.epMax * .1) : b === 'ep50' ? Math.ceil(u.epMax * .5) : 0;
+    if (p.kind === 'craft' && (p.cp || 0) > Math.min(CP_CAP, u.cp + cpBonus)) return { ok: false, msg: `Not enough CP: ${u.name} has ${u.cp}.` };
+    if (p.kind === 'arts' && (p.ep || 0) > u.ep + epBonus) return { ok: false, msg: `Not enough EP: ${u.name} has ${u.ep}.` };
+    if (p.kind === 'scraft' && u.cp + cpBonus < S_MIN) return { ok: false, msg: `S-Crafts need ${S_MIN} CP: ${u.name} has ${u.cp}.` };
+    return { ok: true };
+  }
+
   function confirmPending() {
     const pv = preview(); if (!pv) return;
-    snapshot();
     const { cur, u, p, d } = pv;
+    if (!costCheck(p, u).ok) return;
+    snapshot();
     const b = bonusAt(S.slot);
     S.now = cur.tick;
+    applyBonus(u, b);
+    let text = actionText(p, u);
+    if (tracked(u)) {
+      if (p.kind === 'craft' && p.cp) { const s = -bump(u, 'cp', -p.cp); if (s) text += ` (−${s} CP)`; }
+      if (p.kind === 'arts' && p.ep) { const s = -bump(u, 'ep', -p.ep); if (s) text += ` (−${s} EP)`; }
+      if (p.kind === 'scraft') { if (u.cp >= CP_CAP) text += ' (empowered at 200 CP)'; u.cp = 0; }
+    }
     if (cur.kind === 'cast' || p.kind === 'resolve') { cur.kind = 'turn'; delete cur.art; delete cur.after; }
     if (p.kind === 'arts') { cur.kind = 'cast'; cur.art = p.name || 'Arts'; cur.after = p.after ?? S.costs.afterCast; }
-    cur.tick = S.now + d; cur.seq = ++S.seqN; cur.sbreak = false;
-    addLog(actionText(p, u), d, b);
+    cur.tick = r1(S.now + d); cur.seq = ++S.seqN; cur.sbreak = false;
+    addLog(text, d, b);
     S.slot++;
     S.pending = null;
     commit();
@@ -609,12 +720,13 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     const u = U(id), e = E(id); if (!u || !e) return;
     const front = queue()[0];
     const step = Number(S.settings.step) || 1;
+    if (cmd === 'sbreak' && tracked(u) && u.cp < S_MIN) return;
     snapshot();
     if (cmd === 'delay') {
-      e.tick += step; e.seq = ++S.seqN; addLog(`${u.name} is delayed`, step);
+      e.tick = r1(e.tick + step); e.seq = ++S.seqN; addLog(`${u.name} is delayed`, step);
     } else if (cmd === 'hasten') {
       if (front && e !== front) {
-        let t = e.tick - step;
+        let t = r1(e.tick - step);
         if (t <= front.tick) { t = front.tick; e.seq = front.seq + 0.001; }
         e.tick = t;
       }
@@ -633,8 +745,9 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       if (!u.ko) {
         const nf = queue().filter(x => x !== e)[0];
         const base = nf ? nf.tick : S.now;
-        if (e.tick < base) { e.tick = base + delay(S.costs.attack, u.mod); e.seq = ++S.seqN; }
+        if (e.tick < base) { e.tick = r1(base + delay(S.costs.attack, u.mod)); e.seq = ++S.seqN; }
         e.kind = 'turn'; delete e.art; e.sbreak = false;
+        if (tracked(u) && u.hpMax > 0 && u.hp === 0) u.hp = 1;
       }
       addLog(u.ko ? `${u.name} is knocked out` : `${u.name} is back in the fight`);
     } else if (cmd === 'remove') {
@@ -695,7 +808,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       if (it.ghost) {
         const name = pv.cast ? (pv.p.name || 'Arts') : pv.u.name;
         return `<div class="slot ghost ${pv.u.side} ${pv.cast ? 'cast' : ''}"${attrs}>
-          <span class="when">${nums ? '+' + pv.d : '&nbsp;'}</span>
+          <span class="when">${nums ? '+' + fmtT(pv.d) : '&nbsp;'}</span>
           <span class="ico">${iconFor(pv.cast ? 'cast' : 'turn', pv.u)}</span>
           <span class="nm">${esc(name)}</span>
           ${pv.cast ? `<span class="sub">${esc(pv.u.name)} casting</span>` : ''}
@@ -705,7 +818,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       }
       const e = it.e, u = U(e.unitId), cast = e.kind === 'cast';
       const cls = ['slot', u.side, cast ? 'cast' : '', it.now ? 'now' : '', e.sbreak ? 'sb' : '', moved ? 'enter' : ''].join(' ');
-      const when = it.now ? 'NOW' : (nums ? '+' + (e.tick - front.tick) : '');
+      const when = it.now ? 'NOW' : (nums ? '+' + fmtT(e.tick - front.tick) : '');
       return `<div class="${cls}"${attrs} style="animation-delay:${i * 25}ms">
         <span class="when">${when || '&nbsp;'}</span>
         <span class="ico">${iconFor(e.kind, u)}</span>
@@ -725,7 +838,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       const what = pv.p.kind === 'resolve' ? `${esc(pv.p.name)} resolves` : esc(ACTIONS[pv.p.kind].label + (pv.p.name ? ': ' + pv.p.name : ''));
       const nth = pv.index + 2;
       pline.hidden = false;
-      pline.innerHTML = `<span class="tag pv">PREVIEW</span><span><b>${esc(pv.u.name)}</b> · ${what} → ${pv.cast ? 'the cast resolves' : 'next turn'} in position <b>${nth}</b>${nums ? ` (+${pv.d})` : ''}</span>${chipHtml(pv.bonus)}`;
+      pline.innerHTML = `<span class="tag pv">PREVIEW</span><span><b>${esc(pv.u.name)}</b> · ${what} → ${pv.cast ? 'the cast resolves' : 'next turn'} in position <b>${nth}</b>${nums ? ` (+${fmtT(pv.d)})` : ''}</span>${chipHtml(pv.bonus)}`;
     } else pline.hidden = true;
 
     document.getElementById('legend').innerHTML =
@@ -737,8 +850,10 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
   function actBtn(kind, u) {
     const a = ACTIONS[kind];
     const on = S.pending && S.pending.kind === kind ? ' on' : '';
-    const d = kind === 'custom' ? 'any delay' : '+' + delay(S.costs[a.cost], u.mod);
-    return `<button class="actbtn${on}${kind === 'scraft' ? ' scraft' : ''}" data-act="${kind}"><b>${a.label}${a.named ? '…' : ''}</b><span>${d}</span></button>`;
+    const d = kind === 'custom' ? 'any delay' : '+' + fmtT(delay(S.costs[a.cost], u.mod));
+    const locked = kind === 'scraft' && tracked(u) && u.cp < S_MIN;
+    const extra = kind === 'scraft' && tracked(u) ? (u.cp >= CP_CAP ? ' · 200!' : locked ? ` · ${S_MIN} CP` : '') : '';
+    return `<button class="actbtn${on}${kind === 'scraft' ? ' scraft' : ''}" data-act="${kind}" ${locked ? `disabled title="Needs ${S_MIN} CP"` : ''}><b>${a.label}${a.named ? '…' : ''}</b><span>${d}${extra}</span></button>`;
   }
 
   function renderAct() {
@@ -750,6 +865,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       <div class="acthead"><span class="ico ${cast ? 'cast' : u.side}">${iconFor(cur.kind, u)}</span>
         <div><div class="eyebrow">${u.side === 'ally' ? 'Party' : 'Enemy'} · Delay mod <span class="num">${fmtMod(u.mod)}</span>${cur.sbreak ? ' · S-Break' : ''}</div>
         <h2>${esc(cast ? cur.art : u.name)}${cast ? ` <span class="muted" style="font-size:.9rem">(${esc(u.name)})</span>` : ''}</h2></div></div>`;
+    if (tracked(u)) h += `<div>${resRows(u)}</div>`;
     if (b !== 'none') h += `<div class="bonusnote">${chipHtml(b)}<span>${BONUS[b].desc}</span></div>`;
     if (cast) {
       h += `<p class="muted">Resolve the art at the table, then ${esc(u.name)} recovers.</p>
@@ -767,10 +883,13 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
           ${a.named ? `<label class="grow">${a.named}<input type="text" id="f-name" value="${esc(p.name || '')}" ${p.kind === 'arts' ? 'list="artsList"' : ''} autocomplete="off"></label>` : ''}
           <label>${p.kind === 'arts' ? 'Cast time' : 'Base delay'}<input type="number" id="f-base" min="0" max="99" value="${p.base}"></label>
           ${p.kind === 'arts' ? `<label>After-cast<input type="number" id="f-after" min="0" max="99" value="${p.after}"></label>` : ''}
+          ${p.kind === 'craft' && tracked(pv.u) ? `<label>CP cost<input type="number" id="f-cp" min="0" max="200" value="${p.cp || 0}"></label>` : ''}
+          ${p.kind === 'arts' && tracked(pv.u) ? `<label>EP cost<input type="number" id="f-ep" min="0" max="999" value="${p.ep || 0}"></label>` : ''}
         </div>`}
         <div class="landing" id="landing">${landingHtml(pv)}</div>
+        <p class="errtext" id="f-cost" ${costCheck(p, pv.u).ok ? 'hidden' : ''}>${esc(costCheck(p, pv.u).msg || '')}</p>
         <div class="tools">
-          <button class="btn primary" type="submit" id="f-confirm">${p.kind === 'arts' ? 'Start casting' : 'Confirm'}</button>
+          <button class="btn primary" type="submit" id="f-confirm" ${costCheck(p, pv.u).ok ? '' : 'disabled'}>${p.kind === 'arts' ? 'Start casting' : 'Confirm'}</button>
           <button class="btn ghost" type="button" data-act="cancel">Cancel</button>
         </div>
       </form>`;
@@ -778,7 +897,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     el.innerHTML = h;
   }
   function landingHtml(pv) {
-    return `<span><span class="k">Lands</span> <span class="v">+${pv.d}</span></span>
+    return `<span><span class="k">Lands</span> <span class="v">+${fmtT(pv.d)}</span></span>
       <span><span class="k">Position</span> <span class="v">${pv.index + 2}</span></span>
       <span><span class="k">Bonus</span> ${pv.bonus !== 'none' ? chipHtml(pv.bonus) : '<span class="muted">none</span>'}</span>`;
   }
@@ -793,7 +912,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       let status;
       if (u.ko) status = '<span class="muted">KO</span>';
       else if (isCur) status = '<b>Acting</b>';
-      else status = `<span class="num">+${e.tick - front.tick}</span>`;
+      else status = `<span class="num">+${fmtT(e.tick - front.tick)}</span>`;
       if (!u.ko && e.kind === 'cast') status += ` <span class="castlbl">· ${esc(e.art)}</span>`;
       return `<tr class="${u.ko ? 'ko' : ''} ${isCur ? 'current' : ''}">
         <td><span class="sideicon ${u.side}" title="${u.side === 'ally' ? 'Party' : 'Enemy'}">${u.side === 'ally' ? ICON.shield : ICON.swords}</span></td>
@@ -803,7 +922,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
         <td><div class="rowbtns">
           <button class="btn small" data-r="hasten" data-id="${u.id}" title="Hasten by the delay step" ${u.ko || isCur ? 'disabled' : ''}>−</button>
           <button class="btn small" data-r="delay" data-id="${u.id}" title="Delay by the delay step" ${u.ko ? 'disabled' : ''}>+</button>
-          <button class="btn small gold" data-r="sbreak" data-id="${u.id}" title="S-Break: take the current turn now" ${u.ko ? 'disabled' : ''}>S-Break</button>
+          <button class="btn small gold" data-r="sbreak" data-id="${u.id}" title="${tracked(u) && u.cp < S_MIN ? `S-Break needs ${S_MIN} CP (has ${u.cp})` : 'S-Break: take the current turn now'}" ${u.ko || (tracked(u) && u.cp < S_MIN) ? 'disabled' : ''}>S-Break</button>
           ${e.kind === 'cast' && !u.ko ? `<button class="btn small" data-r="impede" data-id="${u.id}" title="Cancel the art being cast">Impede</button>` : ''}
           <button class="btn small" data-r="ko" data-id="${u.id}">${u.ko ? 'Revive' : 'KO'}</button>
           <button class="btn small warn" data-r="remove" data-id="${u.id}" title="Remove from battle" aria-label="Remove ${esc(u.name)}">✕</button>
@@ -821,15 +940,19 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     set('set-rate', st.rate); document.getElementById('rateVal').textContent = st.rate + '%';
     set('set-numbers', st.numbers); set('set-step', st.step);
     set('set-mode', st.mode); set('set-pct', st.pct); set('set-modmin', st.modMin); set('set-modmax', st.modMax);
-    document.getElementById('pctWrap').hidden = st.mode !== 'pct';
+    document.getElementById('pctWrap').hidden = st.mode === 'flat';
     const base = S.costs.attack;
     const mods = [];
-    for (let m = st.modMin; m <= st.modMax; m++) mods.push(`<b>${fmtMod(m)}</b> → ${delay(base, m)}`);
+    for (let m = st.modMin; m <= st.modMax; m++) mods.push(`<b>${fmtMod(m)}</b> → ${fmtT(delay(base, m))}`);
     document.getElementById('modExample').innerHTML = `Attack (base ${base}): ${mods.join(' · ')}. ` +
-      (st.mode === 'pct' ? `Each point changes every delay by ${st.pct}%.` : 'Each point adds or removes 1 from every delay.') + ' Delays never drop below 1.';
+      (st.mode === 'rate' ? `Each point gives ${st.pct}% fewer turns (+) or more turns (−), so stacking speed never snowballs.` :
+       st.mode === 'pct' ? `Each point changes every delay by ${st.pct}%.` : 'Each point adds or removes 1 from every delay.') + ' Delays never drop below 1.';
     const costs = document.getElementById('costs');
     if (!costs.contains(document.activeElement)) costs.innerHTML = Object.keys(COST_LABELS).map(k =>
       `<label>${COST_LABELS[k]}<input type="number" id="cost-${k}" min="0" max="99" value="${S.costs[k]}" data-cost="${k}"></label>`).join('');
+    const gains = document.getElementById('gains');
+    if (!gains.contains(document.activeElement)) gains.innerHTML = Object.keys(GAIN_LABELS).map(k =>
+      `<label>${GAIN_LABELS[k]}<input type="number" id="gain-${k}" min="0" max="200" value="${S.gains[k]}" data-gain="${k}"></label>`).join('');
     document.getElementById('undoBtn').disabled = !undoStack.length;
   }
 
@@ -837,13 +960,164 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     const items = S.log.slice(-limit).reverse();
     if (!items.length) return '<li class="empty">Nothing has happened yet.</li>';
     return items.map(l => {
-      const d = nums && l.d != null ? ` (${l.d > 0 ? '+' : '−'}${Math.abs(l.d)})` : '';
+      const d = nums && l.d != null ? ` (${l.d > 0 ? '+' : '−'}${fmtT(Math.abs(l.d))})` : '';
       return `<li><span class="t">${l.t ? '#' + l.t : ''}</span><span>${esc(l.text)}${d}</span>${chipHtml(l.bonus)}</li>`;
     }).join('');
   }
   function renderLog() {
     if (!PLAYER) document.getElementById('log').innerHTML = logHtml(true, 80);
     document.getElementById('plog').innerHTML = logHtml(S.settings.numbers, 12);
+  }
+
+  /* ---------- party resources: bars, GM party view, phones ---------- */
+  function resRow(u, k) {
+    const cur = u[k], max = k === 'cp' ? CP_CAP : u[k + 'Max'];
+    const w = max > 0 ? Math.max(0, Math.min(100, cur / max * 100)) : 0;
+    const low = k === 'hp' && max > 0 && cur <= max * .25 ? ' low' : '';
+    const val = k === 'cp' ? `${cur}` : (max > 0 ? `${cur}/${max}` : `${cur}`);
+    return `<div class="res"><span class="rk">${RES[k]}</span><span class="bar ${k}${low}"><i style="width:${w}%"></i></span><span class="rv">${val}</span></div>`;
+  }
+  const resRows = u => ['hp', 'ep', 'cp'].map(k => resRow(u, k)).join('');
+  function partyTags(u) {
+    const cur = queue()[0];
+    const t = [];
+    if (u.ko) t.push('<span class="tag ko">KO</span>');
+    else if (cur && cur.unitId === u.id) t.push('<span class="tag nx">ACTING</span>');
+    if (u.cp >= CP_CAP) t.push('<span class="tag ready">S-CRAFT 200</span>');
+    else if (u.cp >= S_MIN) t.push('<span class="tag ready">S-CRAFT</span>');
+    if (!PLAYER && u.claim) t.push('<span class="tag linked" title="A phone is linked to this character">PHONE</span>');
+    return `<span class="tags">${t.join('')}</span>`;
+  }
+  function renderParty() {
+    const el = $('party');
+    const allies = S.units.filter(tracked);
+    el.hidden = !allies.length;
+    if (!allies.length) return;
+    const cur = queue()[0];
+    const editable = !PLAYER && !isPresent();
+    if (editable && el.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return;
+    const cards = allies.map(u => {
+      const cls = ['pcard', u.ko ? 'ko' : '', cur && cur.unitId === u.id ? 'current' : ''].join(' ');
+      let h = `<div class="${cls}"><div class="pname"><span>${esc(u.name)}</span>${partyTags(u)}</div>${resRows(u)}`;
+      if (editable) {
+        const f = (k, label) => `<input type="number" id="pf-${k}-${u.id}" value="${u[k]}" min="0" data-pf="${k}" data-id="${u.id}" aria-label="${esc(u.name)} ${label}">`;
+        h += `<div class="pedit"><span></span><span class="hd">Now</span><span class="hd">Max</span>
+          <span class="rk">HP</span>${f('hp', 'HP')}${f('hpMax', 'max HP')}
+          <span class="rk">EP</span>${f('ep', 'EP')}${f('epMax', 'max EP')}
+          <span class="rk">CP</span>${f('cp', 'CP')}<span class="muted">of ${CP_CAP}</span></div>
+          <div class="qbtns">${['hit', 'crit', 'hurt', 'big'].map(g => `<button class="btn small gold" data-pq="${g}" data-id="${u.id}" title="${GAIN_TEXT[g]}">+${S.gains[g]} ${g === 'hit' ? 'Hit' : g === 'crit' ? 'Crit' : g === 'hurt' ? 'Hurt' : 'Big hit'}</button>`).join('')}</div>`;
+      }
+      return h + '</div>';
+    }).join('');
+    el.innerHTML = `<div class="panel-head"><h3>Party</h3>${editable ? '<span class="muted" style="font-size:.82rem">Players can update their own character from their phones.</span>' : ''}</div><div class="partygrid">${cards}</div>`;
+  }
+
+  /* Resource changes, from the GM's party view or a player's phone. */
+  function resChange(u, f, d) {
+    const n = bump(u, f, d);
+    if (!n) return false;
+    const a = Math.abs(n);
+    const what = f === 'hp' ? (n < 0 ? `takes ${a} damage` : `heals ${a}`) : `${n < 0 ? 'spends' : (f === 'cp' ? 'gains' : 'restores')} ${a} ${RES[f]}`;
+    addLog(`${u.name} ${what} → ${resText(u, f)}`);
+    return true;
+  }
+  function cpGain(u, g) {
+    const n = bump(u, 'cp', Number(S.gains[g]) || 0);
+    if (!n) return false;
+    addLog(`${u.name} gains ${n} CP (${GAIN_TEXT[g]}) → ${u.cp} CP`);
+    return true;
+  }
+  function handleAtbRequest(r) {
+    if (!S) return;
+    const u = S.units.find(x => x.id === r.cid && tracked(x));
+    if (!u) return;
+    if (r.type === 'claim') {
+      S.units.forEach(x => { if (x.claim === r.uid) delete x.claim; });
+      u.claim = r.uid;
+      return commit();
+    }
+    if (u.claim !== r.uid) return; // phones can only change the character they're linked to
+    snapshot();
+    let changed = false;
+    if (r.type === 'res' && RES[r.f]) {
+      const d = Math.round(Number(r.d));
+      if (isFinite(d) && d !== 0 && Math.abs(d) <= 9999) changed = resChange(u, r.f, d);
+    } else if (r.type === 'gain' && GAIN_TEXT[r.g]) changed = cpGain(u, r.g);
+    if (!changed) { undoStack.pop(); return render(); }
+    keepPendingValid();
+    commit();
+  }
+
+  /* The player's own character panel in the ATB tab (phones only). */
+  let amKey = null, amSwitch = false, amWaiting = false;
+  function renderAtbMe() {
+    const el = $('atbMe');
+    const allies = S.units.filter(tracked);
+    const me = myUid ? allies.find(u => u.claim === myUid) : null;
+    if (me) amWaiting = false;
+    const cur = queue()[0];
+    const myTurn = !!(me && cur && cur.unitId === me.id && cur.kind !== 'cast');
+    el.classList.toggle('myturn', myTurn);
+    const key = [authFailed, !!myUid, me ? me.id + me.name : '', amSwitch, amWaiting, me && !amSwitch ? '' : allies.map(u => u.id + (u.claim ? '*' : '') + u.name).join(',')].join('|');
+    if (key !== amKey) { amKey = key; el.innerHTML = amHtml(me, allies); }
+    if (!me || amSwitch) return;
+    $('am-res').innerHTML = resRows(me);
+    $('am-tags').innerHTML = partyTags(me);
+    $('am-status').textContent = amStatus(me, cur);
+  }
+  function amHtml(me, allies) {
+    if (authFailed) return `<h3>Your character</h3><p class="muted">Updating from this phone isn't available right now. Tell the GM your HP, EP and CP out loud.</p>`;
+    if (!myUid) return `<h3>Your character</h3><p class="muted">Connecting…</p>`;
+    if (amWaiting && !me) return `<h3>Your character</h3><p>Linking…</p><p class="muted">This updates as soon as the GM's tracker picks it up.</p>`;
+    if (!me || amSwitch) {
+      if (!allies.length) return `<h3>Your character</h3><p class="muted">Waiting for the GM to add the party.</p>`;
+      const firstFree = allies.find(u => !u.claim) || allies[0];
+      const opts = allies.map(u => `<option value="${u.id}" ${u.id === firstFree.id ? 'selected' : ''}>${esc(u.name)}${u.claim && u.claim !== myUid ? ' (taken)' : ''}</option>`).join('');
+      return `<h3>Who are you playing?</h3>
+        <form class="row" id="amJoin">
+          <label>Character <select id="am-pick">${opts}</select></label>
+          <button class="btn primary" type="submit" id="am-join">This is me</button>
+          ${me ? '<button class="btn ghost" type="button" data-am="cancel">Cancel</button>' : ''}
+        </form>
+        <p class="muted">This phone remembers your pick.</p><p class="errtext" id="amErr" hidden></p>`;
+    }
+    return `<div class="panel-head"><div class="big">${esc(me.name)}</div><span id="am-tags"></span></div>
+      <p class="muted" id="am-status"></p>
+      <div class="grp" id="am-res"></div>
+      <label class="amount">Amount <input type="number" id="am-amt" inputmode="numeric" min="0" max="9999" placeholder="0"></label>
+      <div class="grp"><h3>HP</h3><div class="qbtns">
+        <button class="btn warn" data-am="res" data-f="hp" data-s="-1">Take damage</button>
+        <button class="btn" data-am="res" data-f="hp" data-s="1">Heal</button></div></div>
+      <div class="grp"><h3>EP</h3><div class="qbtns">
+        <button class="btn" data-am="res" data-f="ep" data-s="-1">Spend EP</button>
+        <button class="btn" data-am="res" data-f="ep" data-s="1">Restore EP</button></div></div>
+      <div class="grp"><h3>CP</h3><div class="qbtns">
+        ${['hit', 'crit', 'hurt', 'big'].map(g => `<button class="btn gold" data-am="gain" data-g="${g}">+${S.gains[g]} ${g === 'hit' ? 'Landed a hit' : g === 'crit' ? 'Crit' : g === 'hurt' ? 'Took a hit' : 'Big hit'}</button>`).join('')}
+        <button class="btn" data-am="res" data-f="cp" data-s="-1">Spend CP</button>
+        <button class="btn" data-am="res" data-f="cp" data-s="1">Add CP</button></div></div>
+      <p class="errtext" id="amErr" hidden></p>
+      <div><button class="btn small ghost" data-am="switch">Not you?</button></div>`;
+  }
+  function amStatus(me, cur) {
+    if (me.ko) return "You're knocked out.";
+    if (!cur) return 'Waiting for the battle to start.';
+    if (cur.unitId === me.id) return cur.kind === 'cast' ? `Your ${cur.art} is about to resolve.` : "It's your turn!";
+    const q = queue(), i = q.findIndex(e => e.unitId === me.id);
+    if (i < 0) return '';
+    const e = q[i];
+    const n = q.slice(1, i).length;
+    const base = n === 0 ? "You're up next." : `${n} ${n === 1 ? 'turn' : 'turns'} until yours.`;
+    return e.kind === 'cast' ? `${base} You're casting ${e.art}.` : base;
+  }
+  async function amSend(obj, btn) {
+    const err = $('amErr'); if (err) err.hidden = true;
+    if (btn) btn.disabled = true;
+    try { await adapter.sendRequest(PLAYER_CODE, obj); return true; }
+    catch (e) {
+      console.error(e);
+      if (err) { err.hidden = false; err.textContent = "That didn't reach the GM. Check your connection and try again."; }
+      return false;
+    } finally { if (btn) setTimeout(() => { btn.disabled = false; }, 350); }
   }
 
   function render() {
@@ -858,8 +1132,9 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       return;
     }
     if (!S) return;
-    renderTimeline(); renderLog();
-    if (!PLAYER) { renderAct(); renderRoster(); renderSettings(); renderShare(); }
+    renderTimeline(); renderLog(); renderParty();
+    if (PLAYER) renderAtbMe();
+    else { renderAct(); renderRoster(); renderSettings(); renderShare(); }
   }
 
   /* ================= D&D initiative ================= */
@@ -944,7 +1219,9 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
 
   /* A request sent from a player's phone (already checked by the database rules to come from that phone). */
   function handleRequest(r) {
-    if (!r || !r.uid || !D) return;
+    if (!r || !r.uid) return;
+    if (r.type === 'claim' || r.type === 'res' || r.type === 'gain') return handleAtbRequest(r);
+    if (!D) return;
     if (r.type === 'init') {
       dSnap();
       let c = D.cs.find(x => x.claim === r.uid);
@@ -1235,7 +1512,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       el.innerHTML = h; qrFor = null; return;
     }
     if (Sync.status === 'off') {
-      h += `<p class="help">Players open a link on their phones and follow along as you play. In the Initiative tab they can also send their initiative and end their own turn. Nothing else on your side can be changed from a phone.</p>
+      h += `<p class="help">Players open a link on their phones and follow along as you play. In the ATB tab each player can link their phone to their character and update its HP, EP and CP. In the Initiative tab they can send their initiative and end their own turn. Nothing else on your side can be changed from a phone.</p>
         <div><button class="btn primary" data-cmd="golive">Share with players</button></div>`;
     } else if (Sync.status === 'connecting') {
       h += `<p class="muted">Connecting…</p>`;
@@ -1288,11 +1565,33 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
   document.addEventListener('click', ev => {
     if (PLAYER) {
       if (ev.target.closest('[data-cmd="fullscreen"]')) return fullscreen();
-      const m = ev.target.closest('[data-me]'); if (!m) return;
-      const k = m.dataset.me;
-      if (k === 'switch') { meSwitch = true; meKey = null; return renderMe(); }
-      if (k === 'cancel') { meSwitch = false; meKey = null; return renderMe(); }
-      if (k === 'end') return meSend({ type: 'end' }, m, 'Ending…');
+      const m = ev.target.closest('[data-me]');
+      if (m) {
+        const k = m.dataset.me;
+        if (k === 'switch') { meSwitch = true; meKey = null; return renderMe(); }
+        if (k === 'cancel') { meSwitch = false; meKey = null; return renderMe(); }
+        if (k === 'end') return meSend({ type: 'end' }, m, 'Ending…');
+        return;
+      }
+      const a = ev.target.closest('[data-am]'); if (!a) return;
+      const k = a.dataset.am;
+      const me = S && myUid ? S.units.find(u => tracked(u) && u.claim === myUid) : null;
+      if (k === 'switch') { amSwitch = true; amKey = null; return renderAtbMe(); }
+      if (k === 'cancel') { amSwitch = false; amKey = null; return renderAtbMe(); }
+      if (!me) return;
+      if (k === 'gain') return amSend({ type: 'gain', cid: me.id, g: a.dataset.g }, a);
+      if (k === 'res') {
+        const inp = $('am-amt'), n = Math.round(Number(inp && inp.value));
+        if (!n || n < 0) { const e = $('amErr'); e.hidden = false; e.textContent = 'Type an amount first.'; if (inp) inp.focus(); return; }
+        return amSend({ type: 'res', cid: me.id, f: a.dataset.f, d: n * Number(a.dataset.s) }, a).then(ok => { if (ok && inp) inp.value = ''; });
+      }
+      return;
+    }
+    const pq = ev.target.closest('[data-pq]');
+    if (pq) {
+      const u = U(pq.dataset.id); if (!tracked(u)) return;
+      snapshot();
+      if (cpGain(u, pq.dataset.g)) commit(); else undoStack.pop();
       return;
     }
     const t = ev.target.closest('[data-act],[data-r],[data-d],[data-cmd],.slot[data-slot]');
@@ -1366,6 +1665,11 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
 
   document.addEventListener('submit', ev => {
     ev.preventDefault();
+    if (PLAYER && ev.target.id === 'amJoin') {
+      const cid = $('am-pick').value;
+      amSend({ type: 'claim', cid }, $('am-join')).then(ok => { if (ok) { amSwitch = false; amWaiting = true; amKey = null; renderAtbMe(); } });
+      return;
+    }
     if (PLAYER) {
       const initVal = ($('me-init') || {}).value;
       const init = initVal === '' || initVal == null ? null : Number(initVal);
@@ -1409,11 +1713,11 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       const now = document.getElementById('add-now').checked;
       snapshot();
       const id = 'u' + (S.idN++);
-      S.units.push({ id, name, side, mod });
+      S.units.push(side === 'ally' ? { id, name, side, mod, hp: 0, hpMax: 0, ep: 0, epMax: 0, cp: 0 } : { id, name, side, mod });
       const front = queue()[0];
       const e = { unitId: id, kind: 'turn', seq: ++S.seqN };
       if (front && now) { e.tick = front.tick; e.seq = front.seq + 0.001; S.pending = null; }
-      else e.tick = (front ? front.tick : S.now) + delay(S.costs.attack, mod);
+      else e.tick = r1((front ? front.tick : S.now) + delay(S.costs.attack, mod));
       S.entries.push(e);
       addLog(`${name} joins the battle`);
       document.getElementById('add-name').value = '';
@@ -1423,18 +1727,28 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
   const clampMod = v => Math.max(S.settings.modMin, Math.min(S.settings.modMax, Math.round(Number(v) || 0)));
 
   document.addEventListener('focusout', () => {
-    setTimeout(() => { if (dRosterDirty && MODE === 'dnd' && !PLAYER) renderDRoster(); }, 0);
+    setTimeout(() => {
+      if (dRosterDirty && MODE === 'dnd' && !PLAYER) renderDRoster();
+      if (MODE === 'atb' && !PLAYER && S) renderParty();
+    }, 0);
   });
   document.addEventListener('input', ev => {
     if (PLAYER) { if (ev.target.id === 'me-init') ev.target.dataset.touched = '1'; return; }
     const t = ev.target;
-    if (S.pending && (t.id === 'f-name' || t.id === 'f-base' || t.id === 'f-after')) {
+    if (S.pending && (t.id === 'f-name' || t.id === 'f-base' || t.id === 'f-after' || t.id === 'f-cp' || t.id === 'f-ep')) {
       if (t.id === 'f-name') S.pending.name = t.value;
       if (t.id === 'f-base') S.pending.base = Math.max(0, Number(t.value) || 0);
       if (t.id === 'f-after') S.pending.after = Math.max(0, Number(t.value) || 0);
+      if (t.id === 'f-cp') S.pending.cp = Math.max(0, Math.round(Number(t.value) || 0));
+      if (t.id === 'f-ep') S.pending.ep = Math.max(0, Math.round(Number(t.value) || 0));
       save(); renderTimeline();
       const pv = preview(), land = document.getElementById('landing');
       if (pv && land) land.innerHTML = landingHtml(pv);
+      if (pv) {
+        const cc = costCheck(pv.p, pv.u), msg = $('f-cost'), btn = $('f-confirm');
+        if (msg) { msg.hidden = cc.ok; msg.textContent = cc.msg || ''; }
+        if (btn) btn.disabled = !cc.ok;
+      }
       return;
     }
     if (t.dataset.set === 'show' || t.dataset.set === 'rate') {
@@ -1458,6 +1772,23 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     }
     if (t.dataset.dset === 'showInit') { D.showInit = t.checked; return dCommit(); }
     const st = S.settings;
+    if (t.dataset.pf) {
+      const u = U(t.dataset.id); if (!tracked(u)) return;
+      const k = t.dataset.pf;
+      snapshot();
+      if (k === 'hpMax' || k === 'epMax') {
+        const r = k.slice(0, 2), old = u[k];
+        u[k] = Math.max(0, Math.round(Number(t.value) || 0));
+        if (!old && !u[r]) u[r] = u[k]; // first time a max is set, start full
+        u[r] = clampRes(u, r, u[r]);
+      } else {
+        const before = u[k];
+        u[k] = clampRes(u, k, t.value);
+        if (k === 'hp' && u.hp === 0 && before > 0 && u.hpMax > 0 && !u.ko) { u.ko = true; addLog(`${u.name} is knocked out`); keepPendingValid(); }
+      }
+      return commit();
+    }
+    if (t.dataset.gain) { snapshot(); S.gains[t.dataset.gain] = Math.max(0, Math.min(200, Math.round(Number(t.value) || 0))); return commit(); }
     if (t.dataset.uf) {
       const u = U(t.dataset.id); if (!u) return;
       snapshot();
