@@ -11,9 +11,12 @@ Turn trackers for tabletop RPGs. The GM runs them on a laptop, and players follo
 - **Turn order strip** in the style of the Trails games: the current turn, everyone queued behind it, and spells being cast as their own events.
 - **Confirm with preview:** picking an action shows a ghost card where that character will land, along with the AT bonus waiting there. Players see the preview too.
 - **AT bonuses** (CRIT, HEAL, EP, CP) are tied to timeline positions, so delaying or hastening someone changes which bonus they get. The GM can edit any slot's bonus.
-- **Delay modifiers:** each character has a modifier (default −2 to +2). It can scale every delay proportionally (default 10% per point) or add/subtract a flat amount. You choose which in Settings.
+- **Delay modifiers:** each character has a modifier (default −2 to +2; negative is faster). Three ways to apply it, chosen in Settings: **turn rate** (the default: each point is the same 10% more or fewer turns, so stacking speed never snowballs), proportional (each point changes the delay by 10%), or flat.
+- **Party HP / EP / CP:** every party member has HP, EP and CP (capped at 200). A **Party** panel shows everyone's bars; edit any value, set max HP/EP, or tap the CP buttons (+10 hit, +5 crit, +5 hurt, +15 big hit — adjustable in Settings). Dropping to 0 HP knocks a character out.
+- **CP and EP spend themselves:** crafts take a CP cost and arts an EP cost when you confirm them. S-Crafts and S-Breaks need 100 CP and use it all; at 200 CP the S-Craft is logged as empowered. HEAL / EP / CP AT bonuses apply to whoever takes that turn.
 - **Arts casting, Impede, S-Break, KO/revive**, delay/hasten tools, undo, and a battle log.
-- **Player view:** a link or QR code that shows the timeline and log on phones, read-only, updating live.
+- **Player view:** a link or QR code that shows the timeline, party bars and log on phones, updating live.
+- **Phones track their own character:** in the ATB tab a player picks their character once (the phone remembers it), then updates their HP, EP and CP from the phone. Changes go to the GM's tracker, which only accepts changes to the character that phone is linked to. The GM's Party panel marks linked characters with **PHONE**.
 
 ## Initiative tab (D&D)
 - Add your party and monsters. Monsters with no initiative roll d20 + bonus automatically (**How many** adds Goblin A, B, C…).
@@ -49,8 +52,11 @@ Notes:
 
 ## How delay works
 `next turn = now + delay`, where `delay` is the action's base delay adjusted by the character's modifier:
+- **Turn rate:** `base × 100 / (100 − mod × step%)`, kept to one decimal. At 10%, −2 gives ×0.83 (20% more turns) and +2 gives ×1.25 (20% fewer).
 - **Proportional:** `base × (1 + mod × step%)`, rounded.
 - **Flat:** `base + mod`.
+
+Existing tables keep the mode they were using; switch to Turn rate under Settings → Delay modifier.
 
 Delays never drop below 1. Ties go to whoever was already waiting.
 
