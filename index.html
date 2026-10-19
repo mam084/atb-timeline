@@ -316,6 +316,43 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
 .amtabs { align-self: flex-start; }
 @media (max-width: 560px) { .abil { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
+/* Orbment */
+.el-earth { --el: #d0a25a; } .el-water { --el: #5ea6ec; } .el-fire { --el: #f06c6c; } .el-wind { --el: #5cc480; }
+.el-time { --el: #a78bfa; } .el-space { --el: #e3b94e; } .el-mirage { --el: #c3ccd1; }
+.eldot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--el, var(--muted)); margin-right: 5px; vertical-align: 1px; }
+.orb { display: flex; flex-direction: column; gap: 12px; padding-top: 14px; border-top: 1px solid var(--line); }
+.ocenter { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.oline { display: grid; grid-template-columns: 4.2em minmax(0, 1fr); gap: 6px 10px; align-items: center; }
+.oline .otot { grid-column: 2; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .82rem; }
+.olbl { font-family: var(--font-display); font-weight: 600; font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.oslots { display: flex; flex-wrap: wrap; gap: 6px; position: relative; }
+.oslot { width: 104px; min-height: 52px; padding: 6px 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg);
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; text-align: left; }
+.oslot .on { font-family: var(--font-display); font-weight: 600; font-size: .86rem; line-height: 1.15; overflow-wrap: anywhere; }
+.oslot .os { font-size: .72rem; color: var(--muted); display: flex; align-items: center; }
+.oslot.lk { border-style: dashed; border-color: color-mix(in srgb, var(--el) 70%, var(--line)); }
+.oslot.filled { border: 1px solid var(--el); background: color-mix(in srgb, var(--el) 12%, var(--bg)); }
+.oslot.closed { opacity: .55; background: repeating-linear-gradient(135deg, var(--bg) 0 6px, var(--surface-2) 6px 12px); }
+.oslot.sel { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ocenter .oslot { width: 120px; border-radius: 999px; align-items: center; text-align: center; }
+.tot b { font-family: var(--font-mono); font-weight: 500; }
+.mt { flex-direction: row; align-items: center; gap: 0; }
+.mt input[type="number"] { width: 3.2em; padding: 3px 4px; }
+.mt .mtk { font-size: .72rem; color: var(--muted); margin-right: 3px; }
+.picker { border: 1px solid var(--accent); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; background: var(--bg); }
+.picker select { max-width: 100%; }
+.picker .cq input[type="text"] { width: 100%; }
+.oep { font-size: .92rem; }
+.oep b { color: var(--blue); }
+.arts { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 6px; }
+.arts li { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--bg); display: flex; flex-direction: column; gap: 2px; }
+.arts .an { display: flex; align-items: center; gap: 4px; }
+.arts .an .num { margin-left: auto; color: var(--blue); font-size: .82rem; }
+.arts .ad { font-size: .8rem; color: var(--muted); }
+.near summary { cursor: pointer; color: var(--muted); font-family: var(--font-display); font-weight: 600; font-size: .82rem; letter-spacing: .06em; margin-bottom: 8px; }
+.artinfo { font-size: .85rem; color: var(--muted); }
+.artinfo .warn { color: var(--cast); }
+
 @media (min-width: 900px) {
   .timeline, body.present .timeline { grid-template-columns: repeat(var(--n, 10), minmax(0, 1fr)); }
 }
@@ -390,6 +427,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
   <section class="panel atb-only gm" id="sheetPanel" aria-label="Character sheet" hidden>
     <div class="panel-head" id="sheetHead"></div>
     <div id="sheetBody"></div>
+    <div id="orbBody"></div>
   </section>
 
   <section class="plog present-only" id="plogWrap" aria-label="Battle log">
@@ -490,12 +528,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
   </div>
 </div>
 
-<datalist id="artsList">
-  <option value="Fire Bolt"><option value="Spark Arrow"><option value="Aqua Bleed"><option value="Stone Hammer">
-  <option value="Soul Blur"><option value="Tear"><option value="Teara"><option value="La Tear">
-  <option value="Earth Wall"><option value="Clock Up"><option value="Chrono Drive"><option value="Chrono Burst">
-  <option value="Air Strike"><option value="Holy Breath"><option value="Spiral Flare"><option value="Diamond Dust">
-</datalist>
+<datalist id="artsList"></datalist>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
@@ -554,7 +587,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
   /* ---------- character sheets (party members) ---------- */
   const ABIL = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
   const ABIL_LABEL = { str: 'STR', dex: 'DEX', con: 'CON', int: 'INT', wis: 'WIS', cha: 'CHA' };
-  const DEF_SHEET = { lvl: 1, str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10, frame: '', fspd: 0, hpBase: 0, epBase: 0, acBase: 10, mv: 6 };
+  const DEF_SHEET = { lvl: 1, str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10, frame: '', fspd: 0, hpBase: 0, epBase: 0, acBase: 10, mv: 6, orb: null };
   /* Every editable sheet field: [min, max] for numbers, or 'text' (40 characters). */
   const SHEET_FIELDS = { lvl: [1, 20], str: [1, 30], dex: [1, 30], con: [1, 30], int: [1, 30], wis: [1, 30], cha: [1, 30],
     frame: 'text', fspd: [-1, 1], hpBase: [0, 9999], epBase: [0, 9999], acBase: [0, 40], mv: [0, 30] };
@@ -566,6 +599,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       sh.fspd = Math.max(-1, Math.min(1, Math.round(u.speed || 0)));
     }
     Object.keys(SHEET_FIELDS).forEach(k => { sh[k] = cleanSheet(k, sh[k]); if (sh[k] === null) sh[k] = DEF_SHEET[k]; });
+    sh.orb = normOrb(sh.orb);
     return sh;
   }
   function cleanSheet(k, v) {
@@ -575,18 +609,128 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     const n = Math.round(Number(v));
     return isFinite(n) ? Math.max(f[0], Math.min(f[1], n)) : null;
   }
+
+  /* ---------- orbments, quartz and arts (from the rulebook's Starter Quartz and Arts d20 tabs) ---------- */
+  const ELEM = ['earth', 'water', 'fire', 'wind', 'time', 'space', 'mirage'];
+  const ELEM_LABEL = { earth: 'Earth', water: 'Water', fire: 'Fire', wind: 'Wind', time: 'Time', space: 'Space', mirage: 'Mirage' };
+  const CENTER_EP = 90, SLOT_EP = [40, 55, 80, 115, 165, 220];
+  /* Ways to split the 6 line slots into lines. */
+  const LAYOUTS = ['6', '5+1', '4+2', '4+1+1', '3+3', '3+2+1', '3+1+1+1', '2+2+2', '2+2+1+1', '2+1+1+1+1', '1+1+1+1+1+1'];
+  /* Tier 1 quartz. fx: ac, hp, ep, mv, spd, watk (weapon attack), wdmg (weapon damage), adm (art damage),
+     dexSave, asave (saves vs arts), onHit (status a weapon hit lands on a 20). */
+  const STARTERS = {
+    defense1: { n: 'Defense 1', el: 'earth', b: '+1 AC', fx: { ac: 1 } },
+    petrify1: { n: 'Petrify 1', el: 'earth', b: 'Weapon hits Petrify on d20 20', fx: { onHit: 'Petrify' } },
+    hp1: { n: 'HP 1', el: 'water', b: '+5 max HP', fx: { hp: 5 } },
+    freeze1: { n: 'Freeze 1', el: 'water', b: 'Weapon hits Freeze on d20 20', fx: { onHit: 'Freeze' } },
+    attack1: { n: 'Attack 1', el: 'fire', b: '+1 weapon damage', fx: { wdmg: 1 } },
+    burn1: { n: 'Burn 1', el: 'fire', b: 'Weapon hits Burn on d20 20', fx: { onHit: 'Burn' } },
+    evade1: { n: 'Evade 1', el: 'wind', b: '+1 to DEX saving throws', fx: { dexSave: 1 } },
+    move1: { n: 'Move 1', el: 'wind', b: '+1 square movement', fx: { mv: 1 } },
+    action1: { n: 'Action 1', el: 'time', b: '+1 speed (one per orbment)', fx: { spd: 1 } },
+    faint1: { n: 'Faint 1', el: 'time', b: 'Weapon hits Faint on d20 20', fx: { onHit: 'Faint' } },
+    ep1: { n: 'EP 1', el: 'space', b: '+20 max EP', fx: { ep: 20 } },
+    hit1: { n: 'Hit 1', el: 'space', b: '+1 to weapon attack rolls', fx: { watk: 1 } },
+    mind1: { n: 'Mind 1', el: 'mirage', b: '+1 to art damage rolls', fx: { adm: 1 } },
+    shield1: { n: 'Shield 1', el: 'mirage', b: '+1 to saving throws against arts', fx: { asave: 1 } }
+  };
+  /* All 58 of Zero's arts: n name, g element, ep, r requirements, c cast ticks, a recovery ticks, ar area, ro roll, fx effect. */
+  const ARTS = [{"n":"Stone Spike","g":"earth","ep":10,"r":{"earth":1},"c":6,"a":6,"ar":"Single","ro":"Attack","fx":"2d6; Petrify on d20 19+"},{"n":"Quake","g":"earth","ep":30,"r":{"earth":2},"c":6,"a":6,"ar":"Circle r3 on target","ro":"DEX save","fx":"3d6"},{"n":"Gorgon Breath","g":"earth","ep":40,"r":{"earth":4,"wind":1},"c":7,"a":6,"ar":"Circle r2 on target","ro":"DEX save","fx":"4d6; Petrify on d20 17+"},{"n":"Gaea Titanis","g":"earth","ep":80,"r":{"earth":6,"space":2},"c":9,"a":6,"ar":"Line, 4 wide","ro":"DEX save","fx":"6d6"},{"n":"Yggdrasil","g":"earth","ep":200,"r":{"earth":10,"water":1,"wind":3},"c":7,"a":6,"ar":"Circle r5 on a point","ro":"DEX save","fx":"11d6"},{"n":"Earth Pulse","g":"earth","ep":10,"r":{"earth":2,"water":1},"c":3,"a":10,"ar":"Single","ro":"—","fx":"Regen 10% max HP at the start of each turn, 5 turns"},{"n":"Crest","g":"earth","ep":10,"r":{"earth":1},"c":3,"a":10,"ar":"Single","ro":"—","fx":"+2 AC, 3 turns"},{"n":"La Crest","g":"earth","ep":30,"r":{"earth":3},"c":3,"a":10,"ar":"Circle r3","ro":"—","fx":"+2 AC, 3 turns"},{"n":"Adamantine Guard","g":"earth","ep":80,"r":{"earth":8,"space":3},"c":4,"a":10,"ar":"Circle r2","ro":"—","fx":"Negates the next weapon attack against each ally"},{"n":"Icicle Edge","g":"water","ep":10,"r":{"water":1},"c":6,"a":6,"ar":"Single","ro":"Attack","fx":"2d6; Freeze on d20 19+"},{"n":"Blue Drop","g":"water","ep":20,"r":{"water":2,"space":1},"c":6,"a":6,"ar":"Circle r2 on target","ro":"CON save","fx":"3d6"},{"n":"Ice Hammer","g":"water","ep":30,"r":{"water":4,"earth":1},"c":7,"a":6,"ar":"Circle r3 on target","ro":"CON save","fx":"4d6; Freeze on d20 17+"},{"n":"Hydro Cannon","g":"water","ep":40,"r":{"water":6,"wind":1},"c":7,"a":6,"ar":"Line, 3 wide","ro":"CON save","fx":"5d6"},{"n":"Diamond Dust","g":"water","ep":60,"r":{"water":8,"wind":1,"space":1},"c":9,"a":6,"ar":"Circle r2 on target","ro":"CON save","fx":"6d6; Freeze on d20 15+"},{"n":"Genesis Flood","g":"water","ep":220,"r":{"water":12},"c":9,"a":6,"ar":"All enemies","ro":"CON save","fx":"9d6"},{"n":"Tear","g":"water","ep":10,"r":{"water":1},"c":1,"a":8,"ar":"Single","ro":"—","fx":"Heal 2d8 + mod; cures Burn"},{"n":"Teara","g":"water","ep":30,"r":{"water":3},"c":1,"a":8,"ar":"Single","ro":"—","fx":"Heal 4d8 + mod; cures Burn"},{"n":"Tearal","g":"water","ep":60,"r":{"water":6},"c":2,"a":8,"ar":"Single","ro":"—","fx":"Heal 8d8 + mod; cures Burn"},{"n":"Thelas","g":"water","ep":30,"r":{"water":2},"c":1,"a":8,"ar":"Single","ro":"—","fx":"Revive from 0 HP with 2d8 + mod"},{"n":"Athelas","g":"water","ep":80,"r":{"water":8},"c":3,"a":8,"ar":"Single","ro":"—","fx":"Revive from 0 HP with 4d8 + mod"},{"n":"Cobalt Sphere","g":"water","ep":10,"r":{"water":2,"time":1},"c":3,"a":8,"ar":"Circle r3","ro":"WIS save","fx":"Mute on a failed save, 5 turns"},{"n":"Aqua Mirage","g":"water","ep":40,"r":{"water":5,"wind":3},"c":3,"a":8,"ar":"Circle r3","ro":"—","fx":"Weapon attacks against allies have disadvantage, 3 turns"},{"n":"Fire Bolt","g":"fire","ep":10,"r":{"fire":1},"c":6,"a":6,"ar":"Single","ro":"Attack","fx":"2d6; Burn on d20 19+"},{"n":"Heatwave","g":"fire","ep":25,"r":{"fire":3,"wind":1},"c":7,"a":6,"ar":"Circle r3 on target","ro":"DEX save","fx":"3d6"},{"n":"Magna Blaze","g":"fire","ep":30,"r":{"fire":4,"earth":1},"c":7,"a":6,"ar":"Single","ro":"Attack","fx":"4d6; Burn on d20 15+"},{"n":"Flare Butterfly","g":"fire","ep":90,"r":{"fire":8,"wind":3},"c":9,"a":6,"ar":"Circle r5 on target","ro":"DEX save","fx":"6d6; Burn on d20 17+"},{"n":"Crimson Ray","g":"fire","ep":140,"r":{"fire":12},"c":10,"a":6,"ar":"Single","ro":"Attack","fx":"16d6"},{"n":"Impassion","g":"fire","ep":40,"r":{"fire":5,"wind":1,"space":1},"c":4,"a":10,"ar":"Circle r3","ro":"—","fx":"+10 CP at the start of each turn, 5 turns"},{"n":"Forte","g":"fire","ep":10,"r":{"fire":1},"c":3,"a":10,"ar":"Single","ro":"—","fx":"+1d4 weapon damage, 3 turns"},{"n":"La Forte","g":"fire","ep":30,"r":{"fire":3},"c":3,"a":10,"ar":"Circle r3","ro":"—","fx":"+1d4 weapon damage, 3 turns"},{"n":"Sparkle","g":"wind","ep":10,"r":{"wind":1},"c":4,"a":6,"ar":"Single","ro":"Attack","fx":"2d6; Seal on d20 19+"},{"n":"Aero Sickle","g":"wind","ep":20,"r":{"wind":2,"mirage":1},"c":4,"a":6,"ar":"Line, 2 wide","ro":"DEX save","fx":"3d6"},{"n":"Aerial","g":"wind","ep":30,"r":{"wind":4},"c":6,"a":6,"ar":"Circle r3 on a point","ro":"DEX save","fx":"4d6"},{"n":"Spark Dyne","g":"wind","ep":50,"r":{"wind":6,"space":2},"c":6,"a":6,"ar":"Circle r2 on target","ro":"DEX save","fx":"5d6; Seal on d20 15+"},{"n":"Thunder Cyclone","g":"wind","ep":180,"r":{"wind":10,"time":1,"space":2},"c":7,"a":6,"ar":"Circle r5 on a point","ro":"DEX save","fx":"10d6; Seal on d20 17+"},{"n":"Breath","g":"wind","ep":30,"r":{"wind":2,"water":1},"c":3,"a":8,"ar":"Circle r2","ro":"—","fx":"Heal 4d8 + mod each"},{"n":"Holy Breath","g":"wind","ep":60,"r":{"wind":4,"water":2},"c":3,"a":8,"ar":"Circle r5","ro":"—","fx":"Heal 8d8 + mod each"},{"n":"Recuria","g":"wind","ep":40,"r":{"wind":5},"c":3,"a":8,"ar":"Circle r5","ro":"—","fx":"Cures all ailments except K.O."},{"n":"Lorelei","g":"wind","ep":50,"r":{"wind":6,"time":1,"space":1,"mirage":2},"c":4,"a":8,"ar":"All enemies","ro":"WIS save","fx":"Sleep on d20 11+, 5 turns"},{"n":"Sylphid","g":"wind","ep":20,"r":{"wind":2,"space":1},"c":3,"a":8,"ar":"Circle r3","ro":"—","fx":"+4 squares movement, 3 turns"},{"n":"Soul Blur","g":"time","ep":10,"r":{"time":2},"c":4,"a":6,"ar":"Single","ro":"Attack","fx":"2d6; Faint on d20 19+"},{"n":"Death Spiral","g":"time","ep":60,"r":{"time":6,"space":1,"mirage":2},"c":6,"a":6,"ar":"Circle r3 on target","ro":"WIS save","fx":"5d6; K.O. on d20 19+"},{"n":"Shadow Blade","g":"time","ep":140,"r":{"time":10,"space":1,"mirage":3},"c":7,"a":6,"ar":"Circle r5 on target","ro":"WIS save","fx":"8d6; caster heals 5% of damage dealt"},{"n":"Chrono Down","g":"time","ep":10,"r":{"time":1},"c":3,"a":10,"ar":"Circle r3","ro":"WIS save","fx":"−2 speed, 3 turns"},{"n":"Calamity Claw","g":"time","ep":60,"r":{"time":8},"c":4,"a":10,"ar":"Circle r5","ro":"WIS save","fx":"−3 speed and −3 squares movement, 3 turns"},{"n":"Chrono Drive","g":"time","ep":20,"r":{"time":3},"c":3,"a":10,"ar":"Circle r3","ro":"—","fx":"+2 speed, 3 turns"},{"n":"Dark Matter","g":"space","ep":60,"r":{"space":6},"c":7,"a":6,"ar":"Circle r5 on a point","ro":"CON save","fx":"4d6; pulls targets to the center; −2 squares movement, 3 turns"},{"n":"Last Disaster","g":"space","ep":220,"r":{"space":12,"mirage":8},"c":10,"a":6,"ar":"Line, 3 wide","ro":"CON save","fx":"14d6"},{"n":"Celestial","g":"space","ep":240,"r":{"space":10,"water":8},"c":4,"a":10,"ar":"Circle r5","ro":"—","fx":"Revive and heal 8d8 + mod each"},{"n":"Innocence Arc","g":"space","ep":10,"r":{"space":2},"c":4,"a":10,"ar":"All allies","ro":"—","fx":"Removes stat debuffs"},{"n":"Fortuna","g":"space","ep":30,"r":{"space":4,"water":1,"mirage":1},"c":3,"a":10,"ar":"Circle r5","ro":"—","fx":"+1d4 art damage and +2 to saves against arts, 3 turns"},{"n":"A-Reflex","g":"space","ep":40,"r":{"space":6},"c":3,"a":10,"ar":"Single","ro":"—","fx":"Reflects the next art back at its caster"},{"n":"Chaos Brand","g":"mirage","ep":30,"r":{"mirage":4},"c":7,"a":6,"ar":"Single","ro":"Attack","fx":"4d6; Confuse on d20 19+"},{"n":"Galion Tower","g":"mirage","ep":100,"r":{"mirage":6,"time":1,"space":2},"c":9,"a":6,"ar":"Circle r5 on target","ro":"INT save","fx":"5d6; Blind on a failed save, 5 turns"},{"n":"Avalon Gate","g":"mirage","ep":250,"r":{"mirage":12,"time":1,"space":4},"c":9,"a":6,"ar":"All enemies","ro":"INT save","fx":"10d6"},{"n":"Lunar Craze","g":"mirage","ep":50,"r":{"mirage":6},"c":4,"a":10,"ar":"Circle r5","ro":"WIS save","fx":"Confuse on a failed save, 3 turns; only targets lower in level than the caster"},{"n":"Saint","g":"mirage","ep":30,"r":{"mirage":3,"earth":1,"fire":1},"c":3,"a":10,"ar":"Single","ro":"—","fx":"+1d4 weapon damage and +2 AC, 3 turns"},{"n":"Hollow Sphere","g":"mirage","ep":40,"r":{"mirage":5,"water":1,"wind":3},"c":3,"a":10,"ar":"Single","ro":"—","fx":"Stealth: can't be targeted, 2 turns"}];
+  const ARTS_BY = Object.fromEntries(ARTS.map(a => [a.n.toLowerCase(), a]));
+  const zeroEl = () => Object.fromEntries(ELEM.map(e => [e, 0]));
+  const reqText = r => Object.keys(r).map(e => `${ELEM_LABEL[e]} ${r[e]}`).join(', ');
+  /* A slot's quartz, looked up: starter quartz by key, or a custom one typed in. */
+  function qInfo(q) {
+    if (!q) return null;
+    if (q.k && STARTERS[q.k]) return Object.assign({ v: 1, k: q.k }, STARTERS[q.k]);
+    if (!ELEM.includes(q.el)) return null;
+    return { n: String(q.n || 'Quartz').slice(0, 24), el: q.el, v: Math.max(1, Math.min(12, Math.round(Number(q.v) || 1))), b: String(q.b || '').slice(0, 40), fx: {} };
+  }
+  /* Clean a quartz sent from a phone; null if it isn't valid. */
+  function cleanQ(q) {
+    if (!q || typeof q !== 'object') return null;
+    if (q.k) return STARTERS[q.k] ? { k: q.k } : null;
+    if (!ELEM.includes(q.el)) return null;
+    const n = String(q.n || '').trim().slice(0, 24);
+    if (!n) return null;
+    return { n, el: q.el, v: Math.max(1, Math.min(12, Math.round(Number(q.v) || 1))), b: String(q.b || '').trim().slice(0, 40) };
+  }
+  const newSlot = (o) => ({ o: !!o, l: null, q: null });
+  function newOrb() { return { lay: '6', c: newSlot(true), L: [[newSlot(true), newSlot(), newSlot(), newSlot(), newSlot(), newSlot()]], man: false, tot: [zeroEl()] }; }
+  function normOrb(o) {
+    if (!o || typeof o !== 'object' || !o.c || !Array.isArray(o.L)) return null;
+    const ns = s => ({ o: !!(s && s.o), l: s && ELEM.includes(s.l) ? s.l : null, q: s && s.q ? cleanQ(s.q) : null });
+    const out = { lay: LAYOUTS.includes(o.lay) ? o.lay : '6', c: ns(o.c), L: o.L.map(line => (Array.isArray(line) ? line : []).map(ns)), man: !!o.man };
+    out.tot = out.L.map((_, i) => Object.assign(zeroEl(), (o.tot || [])[i] || {}));
+    return out;
+  }
+  function relayout(o, lay) {
+    const sizes = lay.split('+').map(Number);
+    const L = sizes.map((n, li) => Array.from({ length: n }, (_, si) => (o.L[li] && o.L[li][si]) || newSlot(si === 0)));
+    o.lay = lay; o.L = L;
+    o.tot = L.map((_, i) => o.tot[i] || zeroEl());
+  }
+  const slotAt = (o, li, si) => li === -1 ? o.c : (o.L[li] && o.L[li][si]) || null;
+  /* Every unlocked slot with a quartz in it (center included). */
+  function placed(o) {
+    const out = [];
+    if (o.c.o && o.c.q) out.push(o.c.q);
+    o.L.forEach(line => line.forEach(s => { if (s.o && s.q) out.push(s.q); }));
+    return out.map(qInfo).filter(Boolean);
+  }
+  /* Element totals per line. The center slot connects to every line, so its quartz counts on each one. */
+  function lineTotals(o) {
+    if (!o) return [];
+    if (o.man) return o.L.map((_, i) => Object.assign(zeroEl(), o.tot[i]));
+    const cq = o.c.o ? qInfo(o.c.q) : null;
+    return o.L.map(line => {
+      const t = zeroEl();
+      line.forEach(s => { const qi = s.o ? qInfo(s.q) : null; if (qi) t[qi.el] += qi.v; });
+      if (cq) t[cq.el] += cq.v;
+      return t;
+    });
+  }
+  const meets = (t, r) => Object.keys(r).every(e => (t[e] || 0) >= r[e]);
+  const missing = (t, r) => Object.keys(r).reduce((n, e) => n + Math.max(0, r[e] - (t[e] || 0)), 0);
+  function artsFor(o) {
+    const tots = lineTotals(o);
+    const can = [], near = [];
+    ARTS.forEach(a => {
+      if (tots.some(t => meets(t, a.r))) can.push(a);
+      else if (tots.length && Math.min(...tots.map(t => missing(t, a.r))) === 1) near.push(a);
+    });
+    return { can, near, tots };
+  }
+  function orbEP(o) {
+    let ep = o.c.o ? CENTER_EP : 0;
+    o.L.forEach(line => line.forEach((s, i) => { if (s.o) ep += SLOT_EP[i] || 0; }));
+    return ep;
+  }
+  function orbFx(o) {
+    const fx = { ac: 0, hp: 0, ep: 0, mv: 0, spd: 0, watk: 0, wdmg: 0, adm: 0, dexSave: 0, asave: 0, onHit: [] };
+    if (!o) return fx;
+    placed(o).forEach(qi => Object.keys(qi.fx || {}).forEach(k => {
+      if (k === 'onHit') { if (!fx.onHit.includes(qi.fx.onHit)) fx.onHit.push(qi.fx.onHit); }
+      else fx[k] += qi.fx[k];
+    }));
+    fx.spd = Math.min(1, fx.spd); // Action quartz: one per orbment
+    return fx;
+  }
   const abMod = n => Math.floor((Number(n) - 10) / 2);
   /* Everything the sheet works out for you. */
   function derive(u) {
     const sh = u.sh, m = {};
     ABIL.forEach(a => { m[a] = abMod(sh[a]); });
     const prof = 2 + Math.floor((sh.lvl - 1) / 4);
+    const fx = orbFx(sh.orb);
     return {
-      mods: m, prof,
+      mods: m, prof, fx,
       artAtk: prof + m.int, artDC: 8 + prof + m.int, wis: m.wis,
       crit: Math.max(17, 20 - Math.max(0, m.cha)),
-      speed: sh.fspd,
-      hpMax: sh.hpBase, epMax: sh.epBase, ac: sh.acBase, mv: sh.mv
+      speed: sh.fspd + fx.spd,
+      hpMax: sh.hpBase + fx.hp,
+      epMax: sh.orb ? orbEP(sh.orb) + fx.ep : sh.epBase,
+      ac: sh.acBase + fx.ac, mv: sh.mv + fx.mv
     };
   }
   /* Push sheet results into the live combat numbers. */
@@ -624,8 +768,11 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       { id: 'u2', name: 'Goblin', side: 'enemy', speed: -1 },
       { id: 'u3', name: 'Joshua', side: 'ally', hp: 84, ep: 28, cp: 120,
         sh: { lvl: 3, str: 12, dex: 17, con: 12, int: 10, wis: 13, cha: 14, frame: 'Skirmisher', fspd: 1, hpBase: 84, epBase: 36, acBase: 15, mv: 7 } },
-      { id: 'u4', name: 'Kloe', side: 'ally', hp: 41, ep: 70, cp: 25,
-        sh: { lvl: 3, str: 8, dex: 13, con: 12, int: 16, wis: 15, cha: 12, frame: 'Adept', fspd: 0, hpBase: 66, epBase: 80, acBase: 12, mv: 6 } },
+      { id: 'u4', name: 'Kloe', side: 'ally', hp: 41, ep: 250, cp: 25,
+        sh: { lvl: 3, str: 8, dex: 13, con: 12, int: 16, wis: 15, cha: 12, frame: 'Adept', fspd: 0, hpBase: 66, epBase: 80, acBase: 12, mv: 6,
+          orb: { lay: '4+2', man: false, c: { o: true, l: null, q: { k: 'hp1' } },
+            L: [[{ o: true, l: 'water', q: { k: 'freeze1' } }, { o: true, l: null, q: { k: 'mind1' } }, { o: true, l: null, q: { k: 'ep1' } }, { o: false, l: null, q: null }],
+                [{ o: true, l: null, q: { k: 'attack1' } }, { o: false, l: 'fire', q: null }]] } } },
       { id: 'u5', name: 'Schera', side: 'ally', hp: 70, ep: 55, cp: 200,
         sh: { lvl: 3, str: 10, dex: 16, con: 13, int: 14, wis: 10, cha: 16, frame: 'Duelist', fspd: 1, hpBase: 72, epBase: 64, acBase: 14, mv: 6 } },
       { id: 'u6', name: 'Knight', side: 'enemy', speed: -2 }
@@ -726,6 +873,52 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
   function keepPendingValid() {
     const nf = queue()[0];
     if (S.pending && (!nf || nf.unitId !== S.pending.unitId)) S.pending = null;
+  }
+  /* Orbment changes. Players can place quartz and type line totals; designing the orbment
+     (layout, unlocking slots, element locks) is the GM's. Returns true if something changed. */
+  function applyOrb(u, r, gm) {
+    if (!tracked(u) || !u.sh) return false;
+    const sh = u.sh, lg = t => addLog(`${u.name}'s orbment: ${t}`, null, null, true);
+    if (r.op === 'new') { if (!gm || sh.orb) return false; sh.orb = newOrb(); syncSheet(u); lg('designed (center + 1 slot unlocked)'); return true; }
+    const o = sh.orb; if (!o) return false;
+    const li = Math.round(Number(r.li)), si = Math.round(Number(r.si));
+    const where = li === -1 ? 'center slot' : `line ${li + 1}, slot ${si + 1}`;
+    const slot = isFinite(li) ? slotAt(o, li, li === -1 ? 0 : si) : null;
+    if (r.op === 'q') {
+      if (!slot || !slot.o) return false;
+      const q = r.q === null ? null : cleanQ(r.q);
+      if (r.q !== null && !q) return false;
+      if (JSON.stringify(q) === JSON.stringify(slot.q)) return false;
+      const qi = qInfo(q);
+      if (qi && slot.l && qi.el !== slot.l) return false; // element-locked slot
+      if (qi && qi.k === 'action1' && placed(o).some(x => x.k === 'action1') && !(slot.q && slot.q.k === 'action1')) return false;
+      const old = qInfo(slot.q);
+      slot.q = q; syncSheet(u);
+      lg(qi ? `${qi.n} (${ELEM_LABEL[qi.el]} ${qi.v}) into the ${where}` : `${old ? old.n : 'quartz'} removed from the ${where}`);
+      return true;
+    }
+    if (r.op === 'man') { const on = !!r.on; if (on === o.man) return false; if (on) o.tot = lineTotals(o); o.man = on; syncSheet(u); lg(on ? 'line totals entered by hand' : 'line totals from quartz'); return true; }
+    if (r.op === 'tot') {
+      const t = o.tot[li], v = Math.max(0, Math.min(30, Math.round(Number(r.v) || 0)));
+      if (!t || !ELEM.includes(r.el) || t[r.el] === v) return false;
+      t[r.el] = v; lg(`line ${li + 1} ${ELEM_LABEL[r.el]} set to ${v}`); return true;
+    }
+    if (!gm) return false;
+    if (r.op === 'layout') { if (!LAYOUTS.includes(r.v) || r.v === o.lay) return false; relayout(o, r.v); syncSheet(u); lg(`lines set to ${r.v}`); return true; }
+    if (r.op === 'open') {
+      if (!slot || slot.o === !!r.on) return false;
+      slot.o = !!r.on; if (!slot.o) slot.q = null;
+      syncSheet(u); lg(`${where} ${slot.o ? 'unlocked' : 'locked'}`); return true;
+    }
+    if (r.op === 'lock') {
+      const el = ELEM.includes(r.el) ? r.el : null;
+      if (!slot || slot.l === el) return false;
+      slot.l = el;
+      const qi = qInfo(slot.q); if (qi && el && qi.el !== el) slot.q = null;
+      syncSheet(u); lg(`${where} ${el ? 'locked to ' + ELEM_LABEL[el] : 'takes any element'}`); return true;
+    }
+    if (r.op === 'del') { sh.orb = null; syncSheet(u); lg('removed (max EP is typed in again)'); return true; }
+    return false;
   }
   function changeMira(d, who) {
     d = Math.round(Number(d));
@@ -1022,6 +1215,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
           ${p.kind === 'scraft' && tracked(pv.u) && pv.u.cp >= CP_CAP ? `<label class="inline"><input type="checkbox" id="f-emp" ${p.emp !== false ? 'checked' : ''}> Empowered (spends all 200 CP)</label>` : ''}
           ${p.kind === 'scraft' && tracked(pv.u) && pv.u.cp < CP_CAP ? `<span class="muted" style="font-size:.85rem">Spends ${S_MIN} CP (${pv.u.cp} → ${Math.max(0, pv.u.cp - S_MIN)})</span>` : ''}
         </div>`}
+        ${p.kind === 'arts' ? `<p class="artinfo" id="f-artinfo">${artInfo(p, pv.u)}</p>` : ''}
         <div class="landing" id="landing">${landingHtml(pv)}</div>
         <p class="errtext" id="f-cost" ${costCheck(p, pv.u).ok ? 'hidden' : ''}>${esc(costCheck(p, pv.u).msg || '')}</p>
         <div class="tools">
@@ -1031,6 +1225,19 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       </form>`;
     }
     el.innerHTML = h;
+  }
+  /* What the named art does, with this caster's numbers, and whether their orbment has it. */
+  function artInfo(p, u) {
+    const a = ARTS_BY[(p.name || '').trim().toLowerCase()];
+    if (!a) return 'Pick an art from the list to fill in its cast time, recovery and EP, or type your own.';
+    let h = `${elDot(a.g)}<b>${esc(a.n)}</b> · ${esc(a.ar)}`;
+    if (tracked(u)) {
+      const d = derive(u);
+      h += a.ro === 'Attack' ? ` · Attack ${fmtSigned(d.artAtk)}` : /save/.test(a.ro) ? ` · ${a.ro} DC ${d.artDC}` : '';
+      h += ` · ${esc(a.fx.replace(/\+ mod/g, (d.wis < 0 ? '− ' : '+ ') + Math.abs(d.wis)))}`;
+      if (u.sh.orb && !artsFor(u.sh.orb).can.includes(a)) return `<span class="warn">Not on ${esc(u.name)}'s orbment: needs ${reqText(a.r)} on one line.</span> ${h}`;
+    } else h += ` · ${esc(a.ro)} · ${esc(a.fx)}`;
+    return h;
   }
   function landingHtml(pv) {
     return `<span><span class="k">Lands</span> <span class="v">+${fmtT(pv.d)}</span></span>
@@ -1142,7 +1349,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       const cls = ['pcard', u.ko ? 'ko' : '', cur && cur.unitId === u.id ? 'current' : ''].join(' ');
       let h = `<div class="${cls}"><div class="pname"><span>${esc(u.name)}</span>${partyTags(u)}</div>${resRows(u)}${metaLine(u)}`;
       if (editable) {
-        const f = (k, label, v) => `<input type="number" id="pf-${k}-${u.id}" value="${v ?? u[k]}" min="0" data-pf="${k}" data-id="${u.id}" aria-label="${esc(u.name)} ${label}">`;
+        const f = (k, label, v) => `<input type="number" id="pf-${k}-${u.id}" value="${v ?? u[k]}" min="0" data-pf="${k}" data-id="${u.id}" aria-label="${esc(u.name)} ${label}" ${k === 'epMax' && u.sh.orb ? 'disabled title="From the orbment"' : ''}>`;
         h += `<div class="pedit"><span></span><span class="hd">Now</span><span class="hd">Max</span>
           <span class="rk">HP</span>${f('hp', 'HP')}${f('hpMax', 'max HP')}
           <span class="rk">EP</span>${f('ep', 'EP')}${f('epMax', 'max EP')}
@@ -1172,7 +1379,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       <div class="abil">${abil}</div>
       <div class="shrow">
         <label>Max HP ${num('hpBase')}</label>
-        <label>Max EP ${num('epBase')}</label>
+        ${sh.orb ? `<label title="Comes from the unlocked orbment slots">Max EP <input type="number" value="${d.epMax}" disabled></label>` : `<label>Max EP ${num('epBase')}</label>`}
         <label>Base AC ${num('acBase')}</label>
         <label>Movement ${num('mv')}</label>
       </div>
@@ -1190,9 +1397,16 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       c('Buff turns', fmtSigned(d.wis), 'Your buffs last their listed turns + WIS'),
       c('Ailments on you', fmtSigned(-d.wis) + ' turns', 'Ailments and stat downs last their listed turns − your WIS (minimum 1)'),
       c('Weapon crit', critText(d.crit) + ' · ×1.5', 'Crit on 20 − your CHA modifier (if positive), never below 17. Weapon crits deal 1.5× damage.'),
-      c('Speed', fmtMod(d.speed)),
-      c('AC', d.ac),
-      c('Move', d.mv + ' sq')
+      c('Speed', fmtMod(d.speed), d.fx.spd ? 'Includes +1 from Action quartz' : ''),
+      c('AC', d.ac, d.fx.ac ? `Includes +${d.fx.ac} from quartz` : ''),
+      c('Move', d.mv + ' sq'),
+      d.fx.hp ? c('Max HP', `+${d.fx.hp} (quartz)`) : '',
+      d.fx.watk ? c('Weapon attack', `+${d.fx.watk} (quartz)`) : '',
+      d.fx.wdmg ? c('Weapon damage', `+${d.fx.wdmg} (quartz)`) : '',
+      d.fx.adm ? c('Art damage', `+${d.fx.adm} (quartz)`) : '',
+      d.fx.dexSave ? c('DEX saves', `+${d.fx.dexSave} (quartz)`) : '',
+      d.fx.asave ? c('Saves vs arts', `+${d.fx.asave} (quartz)`) : '',
+      d.fx.onHit.length ? c('Weapon hit on 20', d.fx.onHit.join(', ')) : ''
     ].join('');
   }
   /* Rebuild a sheet unless someone is typing in it; the worked-out numbers always refresh. */
@@ -1203,6 +1417,104 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     const d = derive(u);
     ABIL.forEach(a => { const m = $(`${pre}-m-${a}`); if (m) m.textContent = fmtSigned(d.mods[a]); });
   }
+  /* ---------- orbment builder (GM panel and phones share this) ---------- */
+  let orbSel = null; // { id, li, si }: the slot whose picker is open on this screen
+  const elDot = el => `<i class="eldot el-${el}"></i>`;
+  function slotHtml(u, o, li, si, pre) {
+    const s = slotAt(o, li, si), qi = qInfo(s.q);
+    const sel = orbSel && orbSel.id === u.id && orbSel.li === li && orbSel.si === si;
+    const ep = li === -1 ? CENTER_EP : SLOT_EP[si];
+    const cls = ['oslot', s.o ? '' : 'closed', s.l ? 'lk el-' + s.l : '', qi ? 'filled el-' + qi.el : '', sel ? 'sel' : ''].join(' ');
+    const body = !s.o ? `<span class="on">Locked</span><span class="os">+${ep} EP</span>`
+      : qi ? `<span class="on">${esc(qi.n)}</span><span class="os">${elDot(qi.el)}${ELEM_LABEL[qi.el]} ${qi.v}</span>`
+      : `<span class="on muted">Empty</span><span class="os">${s.l ? elDot(s.l) + ELEM_LABEL[s.l] + ' only' : 'Any element'}</span>`;
+    return `<button type="button" class="${cls}" data-oslot="${li},${si}" data-id="${u.id}" aria-label="${li === -1 ? 'Center slot' : `Line ${li + 1} slot ${si + 1}`}">${body}</button>`;
+  }
+  function totHtml(t) {
+    const parts = ELEM.filter(e => t[e]).map(e => `<span class="tot">${elDot(e)}${ELEM_LABEL[e]} <b>${t[e]}</b></span>`);
+    return parts.length ? parts.join('') : '<span class="muted">No elements yet</span>';
+  }
+  function pickerHtml(u, o, pre, gm) {
+    if (!orbSel || orbSel.id !== u.id) return '';
+    const { li, si } = orbSel, s = slotAt(o, li, si);
+    if (!s) return '';
+    const title = li === -1 ? `Center slot <span class="muted">(+${CENTER_EP} EP, counts on every line)</span>` : `Line ${li + 1}, slot ${si + 1} <span class="muted">(+${SLOT_EP[si]} EP)</span>`;
+    let h = `<div class="picker"><div class="panel-head"><b>${title}</b><button type="button" class="btn small ghost" data-opick="close">Done</button></div>`;
+    if (gm) h += `<div class="row">
+        <label class="inline"><input type="checkbox" data-oop="open" ${s.o ? 'checked' : ''}> Unlocked</label>
+        <label>Element lock <select data-oop="lock">${['', ...ELEM].map(e => `<option value="${e}" ${s.l === (e || null) ? 'selected' : ''}>${e ? ELEM_LABEL[e] + ' only' : 'Any element'}</option>`).join('')}</select></label>
+      </div>`;
+    if (!s.o) return h + `<p class="muted">${gm ? 'Unlock this slot to put quartz in it.' : 'This slot is locked. The GM unlocks slots with sepith.'}</p></div>`;
+    const hasAction = placed(o).some(x => x.k === 'action1') && !(s.q && s.q.k === 'action1');
+    const opts = Object.keys(STARTERS).filter(k => !s.l || STARTERS[k].el === s.l).map(k => {
+      const q = STARTERS[k], off = k === 'action1' && hasAction;
+      return `<option value="${k}" ${s.q && s.q.k === k ? 'selected' : ''} ${off ? 'disabled' : ''}>${q.n} · ${ELEM_LABEL[q.el]} 1 · ${q.b}${off ? ' (one per orbment)' : ''}</option>`;
+    }).join('');
+    const cq = s.q && !s.q.k ? s.q : null;
+    h += `<label>Quartz <select data-oop="pick"><option value="">Empty</option>${opts}<option value="custom" ${cq ? 'selected' : ''}>Custom quartz…</option></select></label>`;
+    h += `<form class="row cq" data-oform="custom" ${cq ? '' : 'hidden'}>
+        <label class="grow">Name <input type="text" name="n" maxlength="24" value="${cq ? esc(cq.n) : ''}" placeholder="e.g. Attack 2" autocomplete="off"></label>
+        <label>Element <select name="el">${(s.l ? [s.l] : ELEM).map(e => `<option value="${e}" ${cq && cq.el === e ? 'selected' : ''}>${ELEM_LABEL[e]}</option>`).join('')}</select></label>
+        <label>Value <input type="number" name="v" min="1" max="12" value="${cq ? cq.v : 2}"></label>
+        <label class="grow">Bonus (notes) <input type="text" name="b" maxlength="40" value="${cq ? esc(cq.b) : ''}" placeholder="e.g. +2 weapon damage" autocomplete="off"></label>
+        <button class="btn small primary" type="submit">Place</button>
+      </form>`;
+    return h + '</div>';
+  }
+  function artRow(a, d) {
+    const roll = a.ro === 'Attack' ? `Attack ${fmtSigned(d.artAtk)}` : /save/.test(a.ro) ? `${a.ro} DC ${d.artDC}` : '';
+    const fx = a.fx.replace(/\+ mod/g, (d.wis < 0 ? '− ' : '+ ') + Math.abs(d.wis));
+    return `<li><div class="an">${elDot(a.g)}<b>${esc(a.n)}</b><span class="num">${a.ep} EP</span></div>
+      <div class="ad">${esc(a.ar)}${roll ? ' · ' + roll : ''} · cast ${a.c}, rec. ${a.a}</div><div class="ad">${esc(fx)}</div></li>`;
+  }
+  function orbHtml(u, pre, gm) {
+    const o = u.sh.orb;
+    if (!o) return `<div class="orb"><h3>Orbment</h3>${gm ? `<p class="muted">No orbment yet. Max EP is typed in on the sheet until you design one.</p><div><button class="btn small primary" data-oop="new">Design orbment</button></div>`
+      : '<p class="muted">The GM hasn\'t set up your orbment yet.</p>'}</div>`;
+    const d = derive(u), { can, near, tots } = artsFor(o);
+    let h = `<div class="orb"><div class="panel-head"><h3>Orbment</h3><div class="tools">`;
+    if (gm) h += `<label class="inline">Lines <select data-oop="layout">${LAYOUTS.map(l => `<option ${o.lay === l ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`;
+    h += `<label class="inline"><input type="checkbox" data-oop="man" ${o.man ? 'checked' : ''}> Type line totals</label></div></div>`;
+    h += `<div class="ocenter">${slotHtml(u, o, -1, 0, pre)}<span class="muted">Center: counts toward every line</span></div>`;
+    h += o.L.map((line, li) => `<div class="oline"><span class="olbl">Line ${li + 1}</span>
+        <div class="oslots">${line.map((_, si) => slotHtml(u, o, li, si, pre)).join('')}</div>
+        <div class="otot">${o.man ? ELEM.map(e => `<label class="mt">${elDot(e)}<span class="mtk">${ELEM_LABEL[e].slice(0, 2)}</span><input type="number" min="0" max="30" value="${o.tot[li][e]}" data-otot="${li}" data-el="${e}" aria-label="Line ${li + 1} ${ELEM_LABEL[e]}"></label>`).join('') : totHtml(tots[li])}</div></div>`).join('');
+    h += pickerHtml(u, o, pre, gm);
+    return h + `</div><div class="orb orbarts">${orbArtsHtml(u)}</div>`;
+  }
+  function orbArtsHtml(u) {
+    const o = u.sh.orb, d = derive(u), { can, near } = artsFor(o);
+    let h = '';
+    const open = (o.c.o ? 1 : 0) + o.L.reduce((n, l) => n + l.filter(x => x.o).length, 0);
+    h += `<p class="oep">Max EP <b class="num">${d.epMax}</b> <span class="muted">= ${open} unlocked slot${open === 1 ? '' : 's'} (${orbEP(o)})${d.fx.ep ? ` + ${d.fx.ep} from EP quartz` : ''}</span></p>`;
+    if (o.man) h += `<p class="muted" style="font-size:.85rem">Typed totals replace what the quartz add up to. Quartz bonuses still apply.</p>`;
+    const byEl = ELEM.map(e => [e, can.filter(a => a.g === e)]).filter(x => x[1].length);
+    h += `<h3>Arts you can cast · ${can.length}</h3>`;
+    h += can.length ? byEl.map(([e, list]) => `<ul class="arts">${list.map(a => artRow(a, d)).join('')}</ul>`).join('')
+      : '<p class="muted">None yet. An art unlocks when one line (plus the center) meets its element requirements.</p>';
+    if (near.length) h += `<details class="near" ${nearOpen ? 'open' : ''}><summary>One element point away · ${near.length}</summary><ul class="arts">${near.map(a => `<li><div class="an">${elDot(a.g)}<b>${esc(a.n)}</b><span class="num">${a.ep} EP</span></div><div class="ad">Needs ${reqText(a.r)} on one line</div></li>`).join('')}</ul></details>`;
+    return h;
+  }
+  let nearOpen = false;
+  /* Redraw the orbment, except while someone is typing in it; the EP and arts list below always refresh. */
+  function fillOrb(el, u, pre, gm) {
+    const typing = el.contains(document.activeElement) && document.activeElement.matches('input[type="text"], input[type="number"]');
+    const arts = el.querySelector('.orbarts');
+    if (typing && arts && u.sh.orb) { arts.innerHTML = orbArtsHtml(u); return; }
+    el.innerHTML = orbHtml(u, pre, gm);
+  }
+  /* Send an orbment change: applied here on the GM's screen, or sent from a phone. */
+  function orbUnit(el) {
+    if (PLAYER) return S && myUid ? S.units.find(u => tracked(u) && u.claim === myUid) : null;
+    return gmSheetId ? U(gmSheetId) : null;
+  }
+  function orbDo(u, r) {
+    if (!u) return;
+    if (PLAYER) return amSend(Object.assign({ type: 'orb', cid: u.id }, r));
+    snapshot();
+    if (applyOrb(u, r, true)) { keepPendingValid(); commit(); } else { undoStack.pop(); render(); }
+  }
+
   function renderSheetPanel() {
     const el = $('sheetPanel');
     const u = gmSheetId ? U(gmSheetId) : null;
@@ -1218,6 +1530,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
         <button class="btn small ghost" data-cmd="closesheet">Close</button></div>`;
     }
     fillSheet($('sheetBody'), u, 'gs');
+    fillOrb($('orbBody'), u, 'go', true);
   }
 
   /* Resource changes, from the GM's party view or a player's phone. */
@@ -1253,6 +1566,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     } else if (r.type === 'gain' && GAIN_TEXT[r.g]) changed = cpGain(u, r.g);
     else if (r.type === 'sheet') changed = applySheet(u, r.f, r.v);
     else if (r.type === 'mira') changed = changeMira(r.d, u.name);
+    else if (r.type === 'orb') changed = applyOrb(u, r, false);
     if (!changed) { undoStack.pop(); return render(); }
     keepPendingValid();
     commit();
@@ -1260,7 +1574,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
 
   /* The player's own character panel in the ATB tab (phones only). */
   let amKey = null, amSwitch = false, amWaiting = false, amTab = 'combat';
-  try { const t = localStorage.getItem('atb-am-tab'); if (t === 'sheet' || t === 'combat') amTab = t; } catch (e) {}
+  try { const t = localStorage.getItem('atb-am-tab'); if (['combat', 'sheet', 'orb'].includes(t)) amTab = t; } catch (e) {}
   function renderAtbMe() {
     const el = $('atbMe');
     const allies = S.units.filter(tracked);
@@ -1277,6 +1591,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     $('am-tags').innerHTML = partyTags(me);
     $('am-status').textContent = amStatus(me, cur);
     if (amTab === 'sheet') fillSheet($('am-sheet'), me, 'ps');
+    else if (amTab === 'orb') fillOrb($('am-orb'), me, 'po', false);
     else { const m = $('am-mira'); if (m) m.textContent = miraText(); }
   }
   function amHtml(me, allies) {
@@ -1295,11 +1610,13 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
         </form>
         <p class="muted">This phone remembers your pick.</p><p class="errtext" id="amErr" hidden></p>`;
     }
-    const tabs = `<div class="tabs amtabs" role="tablist">${[['combat', 'Combat'], ['sheet', 'Sheet']].map(([k, l]) =>
+    const tabs = `<div class="tabs amtabs" role="tablist">${[['combat', 'Combat'], ['sheet', 'Sheet'], ['orb', 'Orbment']].map(([k, l]) =>
       `<button role="tab" data-am="tab" data-tab="${k}" aria-selected="${amTab === k}">${l}</button>`).join('')}</div>`;
     const top = `<div class="panel-head"><div class="big">${esc(me.name)}</div><span id="am-tags"></span></div>
       <p class="muted" id="am-status"></p>
       <div class="grp" id="am-res"></div><div id="am-meta"></div>${tabs}`;
+    if (amTab === 'orb') return top + `<div id="am-orb"></div><p class="errtext" id="amErr" hidden></p>
+      <div><button class="btn small ghost" data-am="switch">Not you?</button></div>`;
     if (amTab === 'sheet') return top + `<div id="am-sheet"></div>
       <p class="muted" style="font-size:.85rem">Changes go straight to your sheet; the GM sees each one.</p>
       <p class="errtext" id="amErr" hidden></p>
@@ -1444,7 +1761,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
   /* A request sent from a player's phone (already checked by the database rules to come from that phone). */
   function handleRequest(r) {
     if (!r || !r.uid) return;
-    if (['claim', 'res', 'gain', 'sheet', 'mira'].includes(r.type)) return handleAtbRequest(r);
+    if (['claim', 'res', 'gain', 'sheet', 'mira', 'orb'].includes(r.type)) return handleAtbRequest(r);
     if (!D) return;
     if (r.type === 'init') {
       dSnap();
@@ -1787,6 +2104,17 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
 
   /* ---------- events ---------- */
   document.addEventListener('click', ev => {
+    const os = ev.target.closest('[data-oslot]');
+    if (os) {
+      const [li, si] = os.dataset.oslot.split(',').map(Number);
+      orbSel = orbSel && orbSel.id === os.dataset.id && orbSel.li === li && orbSel.si === si ? null : { id: os.dataset.id, li, si };
+      return render();
+    }
+    if (ev.target.closest('[data-opick="close"]')) { orbSel = null; return render(); }
+    const ns = ev.target.closest('details.near > summary');
+    if (ns) { setTimeout(() => { nearOpen = ns.parentElement.open; }, 0); }
+    const on = ev.target.closest('button[data-oop="new"]');
+    if (on) return orbDo(orbUnit(on), { op: 'new' });
     if (PLAYER) {
       if (ev.target.closest('[data-cmd="fullscreen"]')) return fullscreen();
       const m = ev.target.closest('[data-me]');
@@ -1902,6 +2230,13 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
 
   document.addEventListener('submit', ev => {
     ev.preventDefault();
+    if (ev.target.dataset.oform === 'custom') {
+      const u = orbUnit(ev.target); if (!u || !orbSel) return;
+      const f = ev.target, val = n => f.querySelector(`[name=${n}]`).value;
+      if (!val('n').trim()) { f.querySelector('[name=n]').focus(); return; }
+      document.activeElement && document.activeElement.blur && document.activeElement.blur();
+      return orbDo(u, { op: 'q', li: orbSel.li, si: orbSel.si, q: { n: val('n'), el: val('el'), v: Number(val('v')), b: val('b') } });
+    }
     if (PLAYER && ev.target.id === 'amJoin') {
       const cid = $('am-pick').value;
       amSend({ type: 'claim', cid }, $('am-join')).then(ok => { if (ok) { amSwitch = false; amWaiting = true; amKey = null; renderAtbMe(); } });
@@ -1989,7 +2324,17 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     const t = ev.target;
     if (S.pending && t.id === 'f-emp') { S.pending.emp = t.checked; return save(); }
     if (S.pending && (t.id === 'f-name' || t.id === 'f-base' || t.id === 'f-after' || t.id === 'f-cp' || t.id === 'f-ep')) {
-      if (t.id === 'f-name') S.pending.name = t.value;
+      if (t.id === 'f-name') {
+        S.pending.name = t.value;
+        const a = S.pending.kind === 'arts' ? ARTS_BY[t.value.trim().toLowerCase()] : null;
+        if (a && S.pending.art !== a.n) {
+          const u = U(S.pending.unitId);
+          S.pending.art = a.n; S.pending.base = a.c; S.pending.after = a.a;
+          if (tracked(u)) S.pending.ep = a.ep;
+          [['f-base', a.c], ['f-after', a.a], ['f-ep', a.ep]].forEach(([id, v]) => { const el = $(id); if (el) el.value = v; });
+        }
+        const info = $('f-artinfo'); if (info) info.innerHTML = artInfo(S.pending, U(S.pending.unitId));
+      }
       if (t.id === 'f-base') S.pending.base = Math.max(0, Number(t.value) || 0);
       if (t.id === 'f-after') S.pending.after = Math.max(0, Number(t.value) || 0);
       if (t.id === 'f-cp') S.pending.cp = Math.max(0, Math.round(Number(t.value) || 0));
@@ -2011,6 +2356,24 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
 
   document.addEventListener('change', ev => {
     const t = ev.target;
+    if (t.dataset.oop || t.dataset.otot !== undefined) {
+      const u = orbUnit(t); if (!u || !S) return;
+      if (t.dataset.otot !== undefined) return orbDo(u, { op: 'tot', li: Number(t.dataset.otot), el: t.dataset.el, v: t.value });
+      const k = t.dataset.oop;
+      if (k === 'layout') return orbDo(u, { op: 'layout', v: t.value });
+      if (k === 'man') return orbDo(u, { op: 'man', on: t.checked });
+      if (!orbSel) return;
+      const at = { li: orbSel.li, si: orbSel.si };
+      if (k === 'open') return orbDo(u, Object.assign({ op: 'open', on: t.checked }, at));
+      if (k === 'lock') return orbDo(u, Object.assign({ op: 'lock', el: t.value }, at));
+      if (k === 'pick') {
+        const form = t.closest('.picker').querySelector('[data-oform]');
+        if (t.value === 'custom') { form.hidden = false; const n = form.querySelector('[name=n]'); if (n) n.focus(); return; }
+        form.hidden = true;
+        return orbDo(u, Object.assign({ op: 'q', q: t.value ? { k: t.value } : null }, at));
+      }
+      return;
+    }
     if (PLAYER) {
       if (t.id === 'me-pick') { const w = $('me-newwrap'); if (w) w.hidden = t.value !== ''; }
       if (t.dataset.sh && S) {
@@ -2076,6 +2439,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
 
   function readLiveCode() { try { return localStorage.getItem(LIVE_KEY); } catch (e) { return null; } }
 
+  $('artsList').innerHTML = ARTS.map(a => `<option value="${esc(a.n)}">${ELEM_LABEL[a.g]} · ${a.ep} EP</option>`).join('');
   if (PLAYER) startPlayer();
   else {
     render();
