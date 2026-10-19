@@ -351,6 +351,21 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
 .arts .ad { font-size: .8rem; color: var(--muted); }
 .near summary { cursor: pointer; color: var(--muted); font-family: var(--font-display); font-weight: 600; font-size: .82rem; letter-spacing: .06em; margin-bottom: 8px; }
 .artinfo { font-size: .85rem; color: var(--muted); }
+
+/* Status effects */
+.stlist { display: flex; flex-wrap: wrap; gap: 4px; justify-content: inherit; }
+.slot .stlist { justify-content: center; }
+.stchip { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-display); font-weight: 600; font-size: .72rem; letter-spacing: .03em;
+  padding: 1px 8px; border-radius: 999px; background: var(--surface-2); color: var(--fg); white-space: nowrap; }
+.stchip.k-ail { color: #f6a06a; background: color-mix(in srgb, var(--cast) 16%, transparent); }
+.stchip.k-down { color: #c4b5fd; background: color-mix(in srgb, #a78bfa 18%, transparent); }
+.stchip.k-buff { color: var(--ally); background: color-mix(in srgb, var(--ally) 15%, transparent); }
+.stchip button { background: none; border: 0; padding: 0 0 0 2px; color: inherit; opacity: .7; font-size: .85rem; line-height: 1; }
+.stchip button:hover { opacity: 1; }
+td .stlist { margin-top: 4px; }
+.stbanner { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--cast) 60%, var(--line)); background: color-mix(in srgb, var(--cast) 10%, transparent); }
+#stForm { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
 .artinfo .warn { color: var(--cast); }
 
 @media (min-width: 900px) {
@@ -477,6 +492,13 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
         <label class="inline"><input type="checkbox" id="add-now"> Act next</label>
         <button class="btn" type="submit">Add</button>
       </form>
+      <form class="addrow" id="stForm">
+        <label>Status for <select id="st-who"></select></label>
+        <label class="grow">Status <select id="st-k"></select></label>
+        <label>Turns <input type="number" id="st-t" min="1" max="99"></label>
+        <button class="btn" type="submit">Add status</button>
+      </form>
+      <p class="help" id="st-help"></p>
     </section>
   </div>
 
@@ -563,7 +585,8 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     defend: { label: 'Defend', cost: 'defend' },
     scraft: { label: 'S-Craft', cost: 'scraft', named: 'S-Craft name' },
     custom: { label: 'Custom', cost: 'attack', named: 'Action' },
-    resolve: { label: 'Resolve', cost: 'afterCast' }
+    resolve: { label: 'Resolve', cost: 'afterCast' },
+    skip: { label: 'Skip turn', cost: 'attack' }
   };
   const COST_LABELS = { attack: 'Attack', craft: 'Craft', castTime: 'Arts cast', afterCast: 'Arts after-cast', item: 'Item', move: 'Move', defend: 'Defend', scraft: 'S-Craft' };
   const DEF_COSTS = { attack: 10, craft: 12, castTime: 6, afterCast: 8, item: 8, move: 6, defend: 8, scraft: 16 };
@@ -716,21 +739,67 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     fx.spd = Math.min(1, fx.spd); // Action quartz: one per orbment
     return fx;
   }
+
+  /* ---------- status effects (Arts d20 tab). kind: ail = ailment, buff, down = stat down.
+     t = default turns (null: until cured or used). fx: speed / AC / movement changes.
+     start: what happens at the start of each of the target's turns. Turns count the target's own turns. ---------- */
+  const STATUS = {
+    petrify: { n: 'Petrify', kind: 'ail', t: null, noAct: 1, d: 'Petrified (5e). CON save at the end of each turn, or cured.' },
+    freeze: { n: 'Freeze', kind: 'ail', t: null, skip: 1, d: "Can't act; next turn is skipped." },
+    faint: { n: 'Faint', kind: 'ail', t: null, skip: 1, d: 'Stunned; next turn is skipped.' },
+    sleep: { n: 'Sleep', kind: 'ail', t: 5, noAct: 1, wake: 1, d: "Can't act. Ends after its duration or when damaged." },
+    burn: { n: 'Burn', kind: 'ail', t: 3, start: 'burn', d: '1d6 fire damage at the start of each turn.' },
+    seal: { n: 'Seal', kind: 'ail', t: 5, noCraft: 1, d: "Can't use crafts or S-Crafts." },
+    mute: { n: 'Mute', kind: 'ail', t: 5, noArts: 1, d: "Can't cast arts; a charging art is cancelled." },
+    confuse: { n: 'Confuse', kind: 'ail', t: 3, d: 'Attacks a random nearby creature, ally or enemy.' },
+    blind: { n: 'Blind', kind: 'ail', t: 5, d: 'Disadvantage on attack rolls.' },
+    cdown: { n: 'Chrono Down', kind: 'down', t: 3, fx: { spd: -2 }, d: '−2 speed.' },
+    claw: { n: 'Calamity Claw', kind: 'down', t: 3, fx: { spd: -3, mv: -3 }, d: '−3 speed and −3 squares movement.' },
+    darkm: { n: 'Dark Matter', kind: 'down', t: 3, fx: { mv: -2 }, d: '−2 squares movement.' },
+    cdrive: { n: 'Chrono Drive', kind: 'buff', t: 3, fx: { spd: 2 }, d: '+2 speed.' },
+    acup: { n: 'Crest', kind: 'buff', t: 3, fx: { ac: 2 }, d: '+2 AC (Crest / La Crest).' },
+    forte: { n: 'Forte', kind: 'buff', t: 3, d: '+1d4 weapon damage (Forte / La Forte).' },
+    saint: { n: 'Saint', kind: 'buff', t: 3, fx: { ac: 2 }, d: '+1d4 weapon damage and +2 AC.' },
+    fortuna: { n: 'Fortuna', kind: 'buff', t: 3, d: '+1d4 art damage and +2 to saves against arts.' },
+    sylphid: { n: 'Sylphid', kind: 'buff', t: 3, fx: { mv: 4 }, d: '+4 squares movement.' },
+    regen: { n: 'Regen', kind: 'buff', t: 5, start: 'regen', d: 'Regain 10% max HP at the start of each turn (Earth Pulse).' },
+    impassion: { n: 'Impassion', kind: 'buff', t: 5, start: 'cp', d: '+10 CP at the start of each turn.' },
+    amirage: { n: 'Aqua Mirage', kind: 'buff', t: 3, d: 'Weapon attacks against them have disadvantage.' },
+    stealth: { n: 'Stealth', kind: 'buff', t: 2, d: "Can't be targeted (Hollow Sphere)." },
+    adamant: { n: 'Adamantine', kind: 'buff', t: null, d: 'Negates the next weapon attack against them.' },
+    reflex: { n: 'A-Reflex', kind: 'buff', t: null, d: 'Reflects the next art back at its caster.' }
+  };
+  const ST_KIND = { ail: 'Ailments', down: 'Stat downs', buff: 'Buffs' };
+  const sts = u => Array.isArray(u.st) ? u.st.filter(x => STATUS[x.k]) : [];
+  const hasSt = (u, flag) => sts(u).some(x => STATUS[x.k][flag]);
+  function stFx(u) {
+    const fx = { spd: 0, ac: 0, mv: 0 };
+    sts(u).forEach(x => { const f = STATUS[x.k].fx || {}; Object.keys(f).forEach(k => { fx[k] += f[k]; }); });
+    return fx;
+  }
+  const stLabel = x => STATUS[x.k].n + (x.t != null ? ' ' + x.t : '');
+  /* Default turns for a new status: ailments and stat downs shrink by the target's WIS (minimum 1). */
+  function stTurns(u, k) {
+    const s = STATUS[k];
+    if (s.t == null) return null;
+    if (s.kind !== 'buff' && tracked(u) && u.sh) return Math.max(1, s.t - abMod(u.sh.wis));
+    return s.t;
+  }
   const abMod = n => Math.floor((Number(n) - 10) / 2);
   /* Everything the sheet works out for you. */
   function derive(u) {
     const sh = u.sh, m = {};
     ABIL.forEach(a => { m[a] = abMod(sh[a]); });
     const prof = 2 + Math.floor((sh.lvl - 1) / 4);
-    const fx = orbFx(sh.orb);
+    const fx = orbFx(sh.orb), sf = stFx(u);
     return {
       mods: m, prof, fx,
       artAtk: prof + m.int, artDC: 8 + prof + m.int, wis: m.wis,
       crit: Math.max(17, 20 - Math.max(0, m.cha)),
-      speed: sh.fspd + fx.spd,
+      speed: sh.fspd + fx.spd + sf.spd, sf,
       hpMax: sh.hpBase + fx.hp,
       epMax: sh.orb ? orbEP(sh.orb) + fx.ep : sh.epBase,
-      ac: sh.acBase + fx.ac, mv: sh.mv + fx.mv
+      ac: sh.acBase + fx.ac + sf.ac, mv: Math.max(0, sh.mv + fx.mv + sf.mv)
     };
   }
   /* Push sheet results into the live combat numbers. */
@@ -742,7 +811,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     if (u.epMax > 0) u.ep = Math.min(u.ep, u.epMax);
   }
   /* Effective speed: from the sheet for party members, set by the GM for enemies. */
-  const spd = u => tracked(u) && u.sh ? derive(u).speed : (Number(u.speed) || 0);
+  const spd = u => tracked(u) && u.sh ? derive(u).speed : (Number(u.speed) || 0) + stFx(u).spd;
   const critText = c => c >= 20 ? '20' : `${c}–20`;
   /* Apply one sheet change (from the GM, or a player's phone). Returns true if something changed. */
   function applySheet(u, k, v) {
@@ -858,9 +927,66 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     if (!tracked(u)) return 0;
     const before = u[k];
     u[k] = clampRes(u, k, before + d);
-    if (k === 'hp' && u.hp === 0 && before > 0 && u.hpMax > 0 && !u.ko) { u.ko = true; addLog(`${u.name} is knocked out`); }
+    if (k === 'hp' && u[k] < before && hasSt(u, 'wake')) removeStatus(u, 'sleep', 'wakes up');
+    if (k === 'hp' && u.hp === 0 && before > 0 && u.hpMax > 0 && !u.ko) knockOut(u);
     return u[k] - before;
   }
+  function knockOut(u) { u.ko = true; u.st = []; addLog(`${u.name} is knocked out`); }
+
+  /* ---------- status effects in play ---------- */
+  function addStatus(u, k, turns) {
+    const s = STATUS[k]; if (!u || !s) return false;
+    if (!Array.isArray(u.st)) u.st = [];
+    const n = Math.round(Number(turns));
+    const t = turns === '' || turns == null || !isFinite(n) ? stTurns(u, k) : Math.max(1, Math.min(99, n));
+    const front = queue()[0];
+    const x = { k, t };
+    if (front && front.unitId === u.id && front.kind !== 'cast') x.fresh = true; // put on during their own turn: that turn doesn't count
+    const i = u.st.findIndex(y => y.k === k);
+    if (i >= 0) u.st[i] = x; else u.st.push(x);
+    addLog(`${u.name}: ${s.n}${t != null ? ` (${t} turn${t === 1 ? '' : 's'})` : ''}`);
+    const e = E(u.id);
+    if (s.noArts && e && e.kind === 'cast') { addLog(`${u.name}'s ${e.art} is cancelled`); e.kind = 'turn'; delete e.art; delete e.after; }
+    return true;
+  }
+  function removeStatus(u, k, why) {
+    if (!Array.isArray(u.st)) return false;
+    const i = u.st.findIndex(x => x.k === k);
+    if (i < 0) return false;
+    u.st.splice(i, 1);
+    addLog(why === 'wakes up' ? `${u.name} wakes up` : `${u.name}'s ${STATUS[k].n} ${why || 'is removed'}`);
+    return true;
+  }
+  const d6 = () => { const r = new Uint32Array(1); try { crypto.getRandomValues(r); } catch (e) { r[0] = Math.random() * 4294967296; } return 1 + (r[0] % 6); };
+  /* Effects at the start of a character's turn: Burn, Regen, Impassion. */
+  function startOfTurn(u) {
+    sts(u).forEach(x => {
+      if (x.fresh) return; // put on during this same turn: starts next turn
+      const s = STATUS[x.k];
+      if (s.start === 'burn') {
+        const r = d6();
+        if (tracked(u) && u.hpMax > 0) { const n = -bump(u, 'hp', -r); addLog(`${u.name} takes ${n} burn damage (1d6: ${r}) → HP ${u.hp}/${u.hpMax}`); }
+        else addLog(`${u.name} takes ${r} burn damage (1d6)`);
+      }
+      if (s.start === 'regen' && tracked(u) && u.hpMax > 0) { const n = bump(u, 'hp', Math.ceil(u.hpMax * .1)); if (n) addLog(`${u.name} regenerates ${n} HP → HP ${u.hp}/${u.hpMax}`); }
+      if (s.start === 'cp' && tracked(u)) { const n = bump(u, 'cp', 10); if (n) addLog(`${u.name} gains ${n} CP (Impassion) → ${u.cp} CP`); }
+    });
+  }
+  /* After a character's turn, their statuses count down. Freeze and Faint end once the turn has been skipped. */
+  function endOfTurn(u, skipped) {
+    if (!Array.isArray(u.st)) return;
+    const keep = [];
+    u.st.forEach(x => {
+      const s = STATUS[x.k]; if (!s) return;
+      if (x.fresh) { delete x.fresh; keep.push(x); return; }
+      if (skipped && s.skip) { addLog(`${u.name} recovers from ${s.n}`); return; }
+      if (x.t != null) { x.t -= 1; if (x.t <= 0) { addLog(`${u.name}'s ${s.n} wears off`); return; } }
+      keep.push(x);
+    });
+    u.st = keep;
+  }
+  /* Statuses that stop a character from acting this turn. */
+  const stopped = u => sts(u).filter(x => STATUS[x.k].skip || STATUS[x.k].noAct);
   const resText = (u, k) => k === 'cp' ? `${u.cp} CP` : `${RES[k]} ${u[k]}${u[k + 'Max'] ? '/' + u[k + 'Max'] : ''}`;
   /* The AT bonus a unit lands on: heal / EP / CP bonuses apply on their own; CRIT is still called at the table. */
   function applyBonus(u, b) {
@@ -964,6 +1090,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     if (p.kind === 'craft') return `${u.name} uses ${p.name || 'a craft'}`;
     if (p.kind === 'scraft') return `${u.name} unleashes ${p.name || 'an S-Craft'}`;
     if (p.kind === 'custom') return `${u.name}: ${p.name || 'custom action'}`;
+    if (p.kind === 'skip') return `${u.name}'s turn is skipped${stopped(u).length ? ` (${stopped(u).map(x => STATUS[x.k].n).join(', ')})` : ''}`;
     return `${u.name}: ${a.label}`;
   }
 
@@ -995,6 +1122,8 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
 
   /* What the pending action costs, and whether the acting character can pay it (counting this turn's CP/EP bonus). */
   function costCheck(p, u) {
+    if (p && u && p.kind === 'arts' && hasSt(u, 'noArts')) return { ok: false, msg: `${u.name} is muted and can't cast arts.` };
+    if (p && u && (p.kind === 'craft' || p.kind === 'scraft') && hasSt(u, 'noCraft')) return { ok: false, msg: `${u.name} is sealed and can't use crafts or S-Crafts.` };
     if (!p || !tracked(u)) return { ok: true };
     const b = bonusAt(S.slot);
     const cpBonus = b === 'cp20' ? 20 : b === 'cp50' ? 50 : 0;
@@ -1007,6 +1136,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
   }
   /* Why a party member can't S-Craft or S-Break right now (null = they can). */
   function sBlock(u) {
+    if (u && hasSt(u, 'noCraft')) return { short: 'sealed', msg: `${u.name} is sealed and can't use S-Crafts.` };
     if (!tracked(u)) return null;
     if (u.sLock) return { short: 'regular turn first', msg: `${u.name} needs a regular turn before another S-Craft.` };
     if (u.cp < S_MIN) return { short: `${S_MIN} CP`, msg: `S-Crafts need ${S_MIN} CP (${u.name} has ${u.cp}).` };
@@ -1027,6 +1157,8 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     const b = bonusAt(S.slot);
     S.now = cur.tick;
     applyBonus(u, b);
+    const turn = p.kind !== 'resolve'; // an art going off isn't a new turn
+    if (turn) startOfTurn(u);
     let text = actionText(p, u);
     if (tracked(u)) {
       if (p.kind === 'craft' && p.cp) { const s = -bump(u, 'cp', -p.cp); if (s) text += ` (−${s} CP)`; }
@@ -1038,6 +1170,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     if (p.kind === 'arts') { cur.kind = 'cast'; cur.art = p.name || 'Arts'; cur.after = p.after ?? S.costs.afterCast; }
     cur.tick = r1(S.now + d); cur.seq = ++S.seqN; cur.sbreak = false;
     addLog(text, d, b);
+    if (turn) endOfTurn(u, p.kind === 'skip');
     S.slot++;
     S.pending = null;
     commit();
@@ -1069,6 +1202,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       if (S.pending && S.pending.unitId === id) S.pending = null;
     } else if (cmd === 'ko') {
       u.ko = !u.ko;
+      if (u.ko) u.st = [];
       if (!u.ko) {
         const nf = queue().filter(x => x !== e)[0];
         const base = nf ? nf.tick : S.now;
@@ -1090,7 +1224,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
   function newBattle() {
     snapshot();
     S.now = 0; S.slot = 0; S.seed = (Math.random() * 2 ** 31) | 0; S.overrides = {}; S.pending = null;
-    S.units.forEach(u => { u.ko = false; delete u.sLock; });
+    S.units.forEach(u => { u.ko = false; delete u.sLock; u.st = []; });
     S.entries.forEach(e => {
       const u = U(e.unitId);
       e.tick = Math.round(delay(S.costs.attack, spd(u)) * Math.random());
@@ -1104,6 +1238,14 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
 
   /* ---------- render ---------- */
   function iconFor(kind, u) { return kind === 'cast' ? ICON.flame : (u.side === 'ally' ? ICON.shield : ICON.swords); }
+  /* Status chips; rm = show a remove button (GM). max = how many before "+N". */
+  function stChips(u, rm, max) {
+    const list = sts(u);
+    if (!list.length) return '';
+    const shown = max ? list.slice(0, max) : list;
+    const more = list.length - shown.length;
+    return `<span class="stlist">${shown.map(x => `<span class="stchip k-${STATUS[x.k].kind}" title="${esc(STATUS[x.k].d)}">${esc(stLabel(x))}${rm ? `<button type="button" data-strm="${x.k}" data-id="${u.id}" aria-label="Remove ${esc(STATUS[x.k].n)}">×</button>` : ''}</span>`).join('')}${more > 0 ? `<span class="stchip">+${more}</span>` : ''}</span>`;
+  }
   function chipHtml(b) { return b && b !== 'none' && BONUS[b] ? `<span class="chip ${BONUS[b].cls}">${BONUS[b].label}</span>` : ''; }
   const isPresent = () => document.body.classList.contains('present');
   const showNums = () => !isPresent() || S.settings.numbers;
@@ -1152,6 +1294,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
         <span class="nm">${esc(cast ? e.art : u.name)}</span>
         ${cast ? `<span class="sub">${esc(u.name)} casting</span>` : ''}
         ${e.sbreak ? '<span class="tag">S-BREAK</span>' : ''}
+        ${stChips(u, false, 2)}
         ${chipHtml(b)}
       </div>`;
     }).join('');
@@ -1178,8 +1321,10 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     const a = ACTIONS[kind];
     const on = S.pending && S.pending.kind === kind ? ' on' : '';
     const d = kind === 'custom' ? 'any delay' : '+' + fmtT(delay(S.costs[a.cost], spd(u)));
-    const why = kind === 'scraft' ? sBlock(u) : '';
-    const extra = kind === 'scraft' && tracked(u) ? (why ? ` · ${why.short}` : u.cp >= CP_CAP ? ' · 200!' : '') : '';
+    const why = kind === 'scraft' ? sBlock(u)
+      : kind === 'arts' && hasSt(u, 'noArts') ? { short: 'muted', msg: `${u.name} is muted.` }
+      : kind === 'craft' && hasSt(u, 'noCraft') ? { short: 'sealed', msg: `${u.name} is sealed.` } : '';
+    const extra = why ? ` · ${why.short}` : kind === 'scraft' && tracked(u) && u.cp >= CP_CAP ? ' · 200!' : '';
     return `<button class="actbtn${on}${kind === 'scraft' ? ' scraft' : ''}" data-act="${kind}" ${why ? `disabled title="${esc(why.msg)}"` : ''}><b>${a.label}${a.named ? '…' : ''}</b><span>${d}${extra}</span></button>`;
   }
 
@@ -1199,6 +1344,13 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
         <div class="tools">${S.pending ? '' : `<button class="btn primary" data-act="resolve">Resolve ${esc(cur.art)}</button>`}
         <button class="btn warn" data-r="impede" data-id="${u.id}">Impede</button></div>`;
     } else {
+      const stop = stopped(u);
+      if (stop.length) {
+        const names = stop.map(x => STATUS[x.k].n).join(', ');
+        const skip = stop.some(x => STATUS[x.k].skip);
+        h += `<div class="stbanner"><span><b>${esc(names)}:</b> ${skip ? 'this turn is skipped.' : `${esc(u.name)} can't act.`}</span><button class="btn primary" data-act="skip">Skip turn</button></div>`;
+      }
+      if (sts(u).length) h += `<div>${stChips(u, true)}</div>`;
       h += `<div class="actions">${['attack', 'craft', 'arts', 'item', 'move', 'defend', 'scraft', 'custom'].map(k => actBtn(k, u)).join('')}</div>`;
     }
     const pv = preview();
@@ -1259,8 +1411,8 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       if (!u.ko && e.kind === 'cast') status += ` <span class="castlbl">· ${esc(e.art)}</span>`;
       return `<tr class="${u.ko ? 'ko' : ''} ${isCur ? 'current' : ''}">
         <td><span class="sideicon ${u.side}" title="${u.side === 'ally' ? 'Party' : 'Enemy'}">${u.side === 'ally' ? ICON.shield : ICON.swords}</span></td>
-        <td><input class="nameinput" type="text" id="name-${u.id}" value="${esc(u.name)}" data-uf="name" data-id="${u.id}" aria-label="Name"></td>
-        <td>${tracked(u) ? `<span class="num" title="Set on ${esc(u.name)}'s sheet">${fmtMod(spd(u))}</span>` : `<input type="number" id="spd-${u.id}" value="${u.speed}" min="-9" max="9" step="1" data-uf="speed" data-id="${u.id}" aria-label="Speed">`}</td>
+        <td><input class="nameinput" type="text" id="name-${u.id}" value="${esc(u.name)}" data-uf="name" data-id="${u.id}" aria-label="Name">${stChips(u, true)}</td>
+        <td>${tracked(u) ? `<span class="num" title="Set on ${esc(u.name)}'s sheet">${fmtMod(spd(u))}</span>` : `<input type="number" id="spd-${u.id}" value="${u.speed}" min="-9" max="9" step="1" data-uf="speed" data-id="${u.id}" aria-label="Speed">${stFx(u).spd ? ` <span class="num" title="With statuses">→ ${fmtMod(spd(u))}</span>` : ''}`}</td>
         <td class="status">${status}</td>
         <td><div class="rowbtns">
           <button class="btn small" data-r="hasten" data-id="${u.id}" title="Hasten by the delay step" ${u.ko || isCur ? 'disabled' : ''}>−</button>
@@ -1271,11 +1423,30 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
           <button class="btn small warn" data-r="remove" data-id="${u.id}" title="Remove from battle" aria-label="Remove ${esc(u.name)}">✕</button>
         </div></td></tr>`;
     }).join('');
+    renderStForm();
     document.getElementById('roster').innerHTML =
       `<thead><tr><th></th><th>Name</th><th title="Speed: + is faster">Speed</th><th>Next</th><th>Controls</th></tr></thead><tbody>${rows ||
       '<tr><td colspan="5" class="muted">No combatants yet.</td></tr>'}</tbody>`;
   }
 
+  function renderStForm() {
+    const who = $('st-who'), sk = $('st-k');
+    if (!who || who.contains(document.activeElement) || sk.contains(document.activeElement)) return;
+    const live = S.units.filter(u => !u.ko);
+    const keep = who.value;
+    who.innerHTML = live.map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join('');
+    if (live.some(u => u.id === keep)) who.value = keep;
+    if (!sk.options.length) sk.innerHTML = Object.keys(ST_KIND).map(kd => `<optgroup label="${ST_KIND[kd]}">${Object.keys(STATUS).filter(k => STATUS[k].kind === kd).map(k => `<option value="${k}">${STATUS[k].n}</option>`).join('')}</optgroup>`).join('');
+    stHint();
+  }
+  /* Show the default turns for this status on this target. */
+  function stHint() {
+    const u = U($('st-who').value), k = $('st-k').value, s = STATUS[k];
+    if (!u || !s) return;
+    const t = stTurns(u, k);
+    $('st-t').placeholder = t == null ? 'until cured' : String(t);
+    $('st-help').textContent = `${s.n}: ${s.d}` + (t == null ? ' Lasts until cured or used.' : s.kind !== 'buff' && tracked(u) && u.sh && abMod(u.sh.wis) ? ` ${t} turns after ${u.name}'s WIS.` : s.kind === 'buff' ? ' Add the caster\'s WIS modifier to the turns.' : '') + ' Leave Turns empty for the default.';
+  }
   function renderSettings() {
     const st = S.settings;
     const set = (id, v) => { const el = document.getElementById(id); if (el && document.activeElement !== el) { if (el.type === 'checkbox') el.checked = !!v; else el.value = v; } };
@@ -1347,7 +1518,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     if (editable && el.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return;
     const cards = allies.map(u => {
       const cls = ['pcard', u.ko ? 'ko' : '', cur && cur.unitId === u.id ? 'current' : ''].join(' ');
-      let h = `<div class="${cls}"><div class="pname"><span>${esc(u.name)}</span>${partyTags(u)}</div>${resRows(u)}${metaLine(u)}`;
+      let h = `<div class="${cls}"><div class="pname"><span>${esc(u.name)}</span>${partyTags(u)}</div>${resRows(u)}${metaLine(u)}${stChips(u, editable)}`;
       if (editable) {
         const f = (k, label, v) => `<input type="number" id="pf-${k}-${u.id}" value="${v ?? u[k]}" min="0" data-pf="${k}" data-id="${u.id}" aria-label="${esc(u.name)} ${label}" ${k === 'epMax' && u.sh.orb ? 'disabled title="From the orbment"' : ''}>`;
         h += `<div class="pedit"><span></span><span class="hd">Now</span><span class="hd">Max</span>
@@ -1587,7 +1758,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     if (key !== amKey) { amKey = key; el.innerHTML = amHtml(me, allies); }
     if (!me || amSwitch) return;
     $('am-res').innerHTML = resRows(me);
-    $('am-meta').innerHTML = metaLine(me);
+    $('am-meta').innerHTML = metaLine(me) + stChips(me, false);
     $('am-tags').innerHTML = partyTags(me);
     $('am-status').textContent = amStatus(me, cur);
     if (amTab === 'sheet') fillSheet($('am-sheet'), me, 'ps');
@@ -1641,6 +1812,8 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
   }
   function amStatus(me, cur) {
     if (me.ko) return "You're knocked out.";
+    const stop = stopped(me);
+    if (stop.length) return `${stop.map(x => STATUS[x.k].n).join(', ')}: ${stop.some(x => STATUS[x.k].skip) ? 'your next turn is skipped.' : "you can't act."}`;
     if (!cur) return 'Waiting for the battle to start.';
     if (cur.unitId === me.id) return cur.kind === 'cast' ? `Your ${cur.art} is about to resolve.` : "It's your turn!";
     const q = queue(), i = q.findIndex(e => e.unitId === me.id);
@@ -2145,6 +2318,13 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       }
       return;
     }
+    const sr = ev.target.closest('[data-strm]');
+    if (sr) {
+      const u = U(sr.dataset.id); if (!u) return;
+      snapshot();
+      if (removeStatus(u, sr.dataset.strm)) { keepPendingValid(); commit(); } else undoStack.pop();
+      return;
+    }
     const so = ev.target.closest('[data-sheet]');
     if (so) {
       gmSheetId = so.dataset.sheet; render();
@@ -2278,6 +2458,12 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       return dCommit();
     }
     if (ev.target.id === 'pendForm') return confirmPending();
+    if (ev.target.id === 'stForm') {
+      const u = U($('st-who').value); if (!u) return;
+      snapshot();
+      if (addStatus(u, $('st-k').value, $('st-t').value)) { $('st-t').value = ''; keepPendingValid(); commit(); } else undoStack.pop();
+      return;
+    }
     if (ev.target.id === 'addForm') {
       const name = document.getElementById('add-name').value.trim(); if (!name) return;
       const side = document.getElementById('add-side').value;
@@ -2389,6 +2575,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       undoStack.pop(); return render();
     }
     if (t.id === 'sheet-pick') { gmSheetId = t.value; return render(); }
+    if (t.id === 'st-who' || t.id === 'st-k') return stHint();
     if (t.id === 'mira') {
       const v = Math.max(0, Math.round(Number(t.value) || 0));
       snapshot();
