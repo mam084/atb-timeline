@@ -11,9 +11,11 @@ Turn trackers for tabletop RPGs. The GM runs them on a laptop, and players follo
 - **Turn order strip** in the style of the Trails games: the current turn, everyone queued behind it, and spells being cast as their own events.
 - **Confirm with preview:** picking an action shows a ghost card where that character will land, along with the AT bonus waiting there. Players see the preview too.
 - **AT bonuses** (CRIT, HEAL, EP, CP) are tied to timeline positions, so delaying or hastening someone changes which bonus they get. The GM can edit any slot's bonus.
-- **Delay modifiers:** each character has a modifier (default −2 to +2; negative is faster). Three ways to apply it, chosen in Settings: **turn rate** (the default: each point is the same 10% more or fewer turns, so stacking speed never snowballs), proportional (each point changes the delay by 10%), or flat.
-- **Party HP / EP / CP:** every party member has HP, EP and CP (capped at 200). A **Party** panel shows everyone's bars; edit any value, set max HP/EP, or tap the CP buttons (+10 hit, +5 crit, +5 hurt, +15 big hit — adjustable in Settings). Dropping to 0 HP knocks a character out.
-- **CP and EP spend themselves:** crafts take a CP cost and arts an EP cost when you confirm them. S-Crafts and S-Breaks need 100 CP and use it all; at 200 CP the S-Craft is logged as empowered. HEAL / EP / CP AT bonuses apply to whoever takes that turn.
+- **Speed:** + is faster. Party speed comes from each character sheet (frame speed −1, 0 or +1); enemy speed is set in the Combatants list. Three ways to apply it, chosen in Settings: **turn rate** (the default and the rulebook formula, `base × 10 / (10 + speed)`: each point is the same 10% more or fewer turns, so stacking speed never snowballs), proportional (each point changes the delay by 10%), or flat.
+- **Party HP / EP / CP:** every party member has HP, EP and CP (capped at 200). A **Party** panel shows everyone's bars plus speed, crit range, art DC and AC; edit any value, or tap the CP buttons (+10 hit, +5 crit, +5 hurt, +15 big hit, +10 kill — adjustable in Settings). Dropping to 0 HP knocks a character out.
+- **CP and EP spend themselves:** crafts take a CP cost and arts an EP cost when you confirm them. S-Crafts and S-Breaks need 100 CP and spend 100; at 200 CP they can be empowered and spend all 200. A character needs a regular turn between S-Crafts. HEAL / EP / CP AT bonuses apply to whoever takes that turn.
+- **Character sheets:** each party member has a sheet with level, frame and frame speed, the six ability scores, max HP/EP, base AC and movement. It works out proficiency, art attack (prof + INT), art DC (8 + prof + INT), the WIS bonus to heals and buff turns, the WIS reduction to ailments, and the weapon crit range (20 − positive CHA modifier, never below 17; ×1.5 damage). Open one from **Open sheet** on a party card; players edit their own from the **Sheet** tab on their phone. Every build change shows in your battle log (tagged SHEET) but stays out of the players' log.
+- **Agency funds:** one shared mira pool for the party, editable by you and by players from their phones.
 - **Arts casting, Impede, S-Break, KO/revive**, delay/hasten tools, undo, and a battle log.
 - **Player view:** a link or QR code that shows the timeline, party bars and log on phones, updating live.
 - **Phones track their own character:** in the ATB tab a player picks their character once (the phone remembers it), then updates their HP, EP and CP from the phone. Changes go to the GM's tracker, which only accepts changes to the character that phone is linked to. The GM's Party panel marks linked characters with **PHONE**.
@@ -51,12 +53,12 @@ Notes:
 - To run the game from a different computer, click **New table code** there and send players the new link.
 
 ## How delay works
-`next turn = now + delay`, where `delay` is the action's base delay adjusted by the character's modifier:
-- **Turn rate:** `base × 100 / (100 − mod × step%)`, kept to one decimal. At 10%, −2 gives ×0.83 (20% more turns) and +2 gives ×1.25 (20% fewer).
-- **Proportional:** `base × (1 + mod × step%)`, rounded.
-- **Flat:** `base + mod`.
+`next turn = now + delay`, where `delay` is the action's base delay adjusted by speed (+ is faster):
+- **Turn rate:** `base × 100 / (100 + speed × step%)`, kept to one decimal. At 10% that's the rulebook's `base × 10 / (10 + speed)`: +1 gives 9.1 on a base of 10, −1 gives 11.1.
+- **Proportional:** `base × (1 − speed × step%)`, rounded.
+- **Flat:** `base − speed`.
 
-Existing tables keep the mode they were using; switch to Turn rate under Settings → Delay modifier.
+Tables saved before speed existed are converted automatically: the old delay modifier becomes speed with the sign flipped, so turn order doesn't change. Existing tables keep the mode they were using; switch to Turn rate under Settings → Speed.
 
 Delays never drop below 1. Ties go to whoever was already waiting.
 

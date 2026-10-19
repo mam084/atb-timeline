@@ -297,6 +297,25 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
 .ame .grp { display: flex; flex-direction: column; gap: 8px; }
 .ame .grp .qbtns .btn { padding: 9px 12px; font-size: .9rem; }
 
+/* Character sheet */
+.pmeta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .78rem; color: var(--muted); }
+.pmeta b { color: var(--fg); font-family: var(--font-mono); font-weight: 500; }
+.sheet { display: flex; flex-direction: column; gap: 14px; }
+.shrow { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: flex-end; }
+.shrow label.grow { flex: 1 1 160px; }
+.shrow input[type="text"] { width: 100%; }
+.abil { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.ab { align-items: center; gap: 4px; padding: 8px 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+.ab .abk { font-family: var(--font-display); font-weight: 700; letter-spacing: .1em; font-size: .74rem; }
+.ab input[type="number"] { width: 3.6em; text-align: center; }
+.ab .abm { font-size: 1rem; color: var(--fg); }
+.derived { display: flex; flex-wrap: wrap; gap: 6px; }
+.dchip { display: inline-flex; gap: 6px; align-items: baseline; padding: 4px 10px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--line); font-size: .82rem; }
+.dchip .k { color: var(--muted); }
+.dchip b { font-family: var(--font-mono); font-weight: 500; }
+.amtabs { align-self: flex-start; }
+@media (max-width: 560px) { .abil { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
 @media (min-width: 900px) {
   .timeline, body.present .timeline { grid-template-columns: repeat(var(--n, 10), minmax(0, 1fr)); }
 }
@@ -368,6 +387,11 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
 
   <section class="party atb-only" id="party" aria-label="Party" hidden></section>
 
+  <section class="panel atb-only gm" id="sheetPanel" aria-label="Character sheet" hidden>
+    <div class="panel-head" id="sheetHead"></div>
+    <div id="sheetBody"></div>
+  </section>
+
   <section class="plog present-only" id="plogWrap" aria-label="Battle log">
     <h3>Battle log</h3>
     <ul class="log" id="plog"></ul>
@@ -411,7 +435,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
         <label>Side
           <select id="add-side"><option value="ally">Party</option><option value="enemy">Enemy</option></select>
         </label>
-        <label>Delay mod <input type="number" id="add-mod" value="0" step="1"></label>
+        <label title="+ is faster. For party members this sets their frame speed (−1 to +1).">Speed <input type="number" id="add-mod" value="0" step="1" min="-9" max="9"></label>
         <label class="inline"><input type="checkbox" id="add-now"> Act next</label>
         <button class="btn" type="submit">Add</button>
       </form>
@@ -422,7 +446,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     <div class="stack">
       <section class="panel share" id="sharePanel" aria-label="Players' phones"></section>
       <section class="panel settings atb-only" aria-label="Settings">
-        <h3>Delay modifier</h3>
+        <h3>Speed</h3>
         <div class="row">
           <label>How it applies
             <select id="set-mode" data-set="mode">
@@ -437,8 +461,6 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
               <option value="20">20%</option><option value="25">25%</option>
             </select>
           </label>
-          <label>Lowest <input type="number" id="set-modmin" min="-9" max="0" data-set="modMin"></label>
-          <label>Highest <input type="number" id="set-modmax" min="0" max="9" data-set="modMax"></label>
         </div>
         <p class="example" id="modExample"></p>
         <h3>Table settings</h3>
@@ -454,7 +476,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
         <div class="costs" id="costs"></div>
         <h3>CP and EP</h3>
         <div class="costs" id="gains"></div>
-        <p class="help">CP caps at 200. S-Crafts and S-Breaks need 100 CP and use it all; at 200 CP the S-Craft is empowered. Crafts and arts spend their CP/EP cost when you confirm them, and HEAL / EP / CP bonuses apply to whoever takes that turn.</p>
+        <p class="help">CP caps at 200. S-Crafts and S-Breaks need 100 CP and spend 100; at 200 CP they can be empowered and spend all 200. A character needs a regular turn between S-Crafts. Crafts and arts spend their CP/EP cost when you confirm them, and HEAL / EP / CP bonuses apply to whoever takes that turn.</p>
         <div class="help">
           <p>AT bonuses belong to timeline positions, not to people. Delaying or hastening a unit moves it onto a different bonus.</p>
         </div>
@@ -512,24 +534,101 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
   };
   const COST_LABELS = { attack: 'Attack', craft: 'Craft', castTime: 'Arts cast', afterCast: 'Arts after-cast', item: 'Item', move: 'Move', defend: 'Defend', scraft: 'S-Craft' };
   const DEF_COSTS = { attack: 10, craft: 12, castTime: 6, afterCast: 8, item: 8, move: 6, defend: 8, scraft: 16 };
-  const DEF_SETTINGS = { show: 12, rate: 30, numbers: false, step: 3, mode: 'rate', pct: 10, modMin: -2, modMax: 2 };
-  /* CP and EP rules (see the rulebook): CP caps at 200, S-Crafts need 100 and use it all, 200 = empowered. */
+  const DEF_SETTINGS = { show: 12, rate: 30, numbers: false, step: 3, mode: 'rate', pct: 10 };
+  /* CP rules (see the rulebook): CP caps at 200. An S-Craft needs 100 and spends 100; at 200 it can be
+     empowered and spends all 200. A character needs a regular turn between S-Crafts. */
   const CP_CAP = 200, S_MIN = 100;
-  const DEF_GAINS = { hit: 10, crit: 5, hurt: 5, big: 15, craft: 20 };
-  const GAIN_LABELS = { hit: 'CP: landed a hit', crit: 'CP: crit (extra)', hurt: 'CP: took a hit', big: 'CP: big hit (25%+)', craft: 'Default craft cost' };
-  const GAIN_TEXT = { hit: 'landed a hit', crit: 'crit', hurt: 'took a hit', big: 'took a big hit' };
+  const DEF_GAINS = { hit: 10, crit: 5, hurt: 5, big: 15, kill: 10, craft: 20 };
+  const GAIN_LABELS = { hit: 'CP: landed a hit', crit: 'CP: crit (extra)', hurt: 'CP: took a hit', big: 'CP: big hit (25%+)', kill: 'CP: defeated a foe', craft: 'Default craft cost' };
+  const GAIN_TEXT = { hit: 'landed a hit', crit: 'crit', hurt: 'took a hit', big: 'took a big hit', kill: 'defeated a foe' };
+  const GAIN_BTN = { hit: 'Hit', crit: 'Crit', hurt: 'Hurt', big: 'Big hit', kill: 'Kill' };
+  const GAIN_BTN_PHONE = { hit: 'Landed a hit', crit: 'Crit', hurt: 'Took a hit', big: 'Big hit', kill: 'Defeated a foe' };
+  const GAIN_KEYS = ['hit', 'crit', 'hurt', 'big', 'kill'];
   const RES = { hp: 'HP', ep: 'EP', cp: 'CP' };
   const r1 = n => Math.round(Number(n) * 10) / 10;
   const fmtT = n => String(r1(n));
+  const fmtMod = m => (m > 0 ? '+' : m < 0 ? '−' : '±') + Math.abs(m);
+  const tracked = u => !!u && u.side === 'ally';
+  const fmtSigned = m => (m < 0 ? '−' : '+') + Math.abs(m);
+
+  /* ---------- character sheets (party members) ---------- */
+  const ABIL = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
+  const ABIL_LABEL = { str: 'STR', dex: 'DEX', con: 'CON', int: 'INT', wis: 'WIS', cha: 'CHA' };
+  const DEF_SHEET = { lvl: 1, str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10, frame: '', fspd: 0, hpBase: 0, epBase: 0, acBase: 10, mv: 6 };
+  /* Every editable sheet field: [min, max] for numbers, or 'text' (40 characters). */
+  const SHEET_FIELDS = { lvl: [1, 20], str: [1, 30], dex: [1, 30], con: [1, 30], int: [1, 30], wis: [1, 30], cha: [1, 30],
+    frame: 'text', fspd: [-1, 1], hpBase: [0, 9999], epBase: [0, 9999], acBase: [0, 40], mv: [0, 30] };
+  const SHEET_LABEL = { lvl: 'Level', frame: 'Frame', fspd: 'Frame speed', hpBase: 'Max HP', epBase: 'Max EP', acBase: 'Base AC', mv: 'Movement' };
+  function normSheet(sh, u) {
+    sh = Object.assign({}, DEF_SHEET, sh || {});
+    if (!u.sh) { // first time: keep what the tracker already had
+      sh.hpBase = u.hpMax || 0; sh.epBase = u.epMax || 0;
+      sh.fspd = Math.max(-1, Math.min(1, Math.round(u.speed || 0)));
+    }
+    Object.keys(SHEET_FIELDS).forEach(k => { sh[k] = cleanSheet(k, sh[k]); if (sh[k] === null) sh[k] = DEF_SHEET[k]; });
+    return sh;
+  }
+  function cleanSheet(k, v) {
+    const f = SHEET_FIELDS[k];
+    if (!f) return null;
+    if (f === 'text') return typeof v === 'string' ? v.trim().slice(0, 40) : '';
+    const n = Math.round(Number(v));
+    return isFinite(n) ? Math.max(f[0], Math.min(f[1], n)) : null;
+  }
+  const abMod = n => Math.floor((Number(n) - 10) / 2);
+  /* Everything the sheet works out for you. */
+  function derive(u) {
+    const sh = u.sh, m = {};
+    ABIL.forEach(a => { m[a] = abMod(sh[a]); });
+    const prof = 2 + Math.floor((sh.lvl - 1) / 4);
+    return {
+      mods: m, prof,
+      artAtk: prof + m.int, artDC: 8 + prof + m.int, wis: m.wis,
+      crit: Math.max(17, 20 - Math.max(0, m.cha)),
+      speed: sh.fspd,
+      hpMax: sh.hpBase, epMax: sh.epBase, ac: sh.acBase, mv: sh.mv
+    };
+  }
+  /* Push sheet results into the live combat numbers. */
+  function syncSheet(u) {
+    if (!tracked(u) || !u.sh) return;
+    const d = derive(u);
+    u.hpMax = d.hpMax; u.epMax = d.epMax;
+    if (u.hpMax > 0) u.hp = Math.min(u.hp, u.hpMax);
+    if (u.epMax > 0) u.ep = Math.min(u.ep, u.epMax);
+  }
+  /* Effective speed: from the sheet for party members, set by the GM for enemies. */
+  const spd = u => tracked(u) && u.sh ? derive(u).speed : (Number(u.speed) || 0);
+  const critText = c => c >= 20 ? '20' : `${c}–20`;
+  /* Apply one sheet change (from the GM, or a player's phone). Returns true if something changed. */
+  function applySheet(u, k, v) {
+    if (!tracked(u) || !u.sh || !SHEET_FIELDS[k]) return false;
+    const nv = cleanSheet(k, v);
+    if (nv === null || nv === u.sh[k]) return false;
+    const old = u.sh[k];
+    const r = k === 'hpBase' ? 'hp' : k === 'epBase' ? 'ep' : null;
+    const wasEmpty = r && !u[r + 'Max'] && !u[r];
+    u.sh[k] = nv;
+    syncSheet(u);
+    if (wasEmpty) u[r] = u[r + 'Max']; // first time a max is set, start full
+    const label = ABIL_LABEL[k] || SHEET_LABEL[k];
+    const show = x => k === 'fspd' ? fmtMod(x) : (x === '' ? '—' : x);
+    addLog(`${u.name}'s sheet: ${label} ${show(old)} → ${show(nv)}`, null, null, true);
+    return true;
+  }
 
   function sample() {
     const units = [
-      { id: 'u1', name: 'Estelle', side: 'ally', mod: 0, hp: 92, hpMax: 110, ep: 30, epMax: 40, cp: 60 },
-      { id: 'u2', name: 'Goblin', side: 'enemy', mod: 1 },
-      { id: 'u3', name: 'Joshua', side: 'ally', mod: -2, hp: 84, hpMax: 84, ep: 28, epMax: 36, cp: 120 },
-      { id: 'u4', name: 'Kloe', side: 'ally', mod: 0, hp: 41, hpMax: 66, ep: 70, epMax: 80, cp: 25 },
-      { id: 'u5', name: 'Schera', side: 'ally', mod: -1, hp: 70, hpMax: 72, ep: 55, epMax: 64, cp: 200 },
-      { id: 'u6', name: 'Knight', side: 'enemy', mod: 2 }
+      { id: 'u1', name: 'Estelle', side: 'ally', hp: 92, ep: 30, cp: 60,
+        sh: { lvl: 3, str: 15, dex: 14, con: 14, int: 8, wis: 12, cha: 13, frame: 'Vanguard', fspd: 0, hpBase: 110, epBase: 40, acBase: 15, mv: 6 } },
+      { id: 'u2', name: 'Goblin', side: 'enemy', speed: -1 },
+      { id: 'u3', name: 'Joshua', side: 'ally', hp: 84, ep: 28, cp: 120,
+        sh: { lvl: 3, str: 12, dex: 17, con: 12, int: 10, wis: 13, cha: 14, frame: 'Skirmisher', fspd: 1, hpBase: 84, epBase: 36, acBase: 15, mv: 7 } },
+      { id: 'u4', name: 'Kloe', side: 'ally', hp: 41, ep: 70, cp: 25,
+        sh: { lvl: 3, str: 8, dex: 13, con: 12, int: 16, wis: 15, cha: 12, frame: 'Adept', fspd: 0, hpBase: 66, epBase: 80, acBase: 12, mv: 6 } },
+      { id: 'u5', name: 'Schera', side: 'ally', hp: 70, ep: 55, cp: 200,
+        sh: { lvl: 3, str: 10, dex: 16, con: 13, int: 14, wis: 10, cha: 16, frame: 'Duelist', fspd: 1, hpBase: 72, epBase: 64, acBase: 14, mv: 6 } },
+      { id: 'u6', name: 'Knight', side: 'enemy', speed: -2 }
     ];
     const ticks = [0, 3, 5, 7, 9, 11];
     const entries = units.map((u, i) => ({ unitId: u.id, tick: ticks[i], seq: i + 1, kind: 'turn' }));
@@ -540,18 +639,27 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       costs: Object.assign({}, DEF_COSTS),
       settings: Object.assign({}, DEF_SETTINGS),
       gains: Object.assign({}, DEF_GAINS),
+      mira: 4200,
       pending: null,
       log: [{ t: 0, text: 'Sample encounter loaded. Edit the roster or press New battle.' }]
     };
   }
   function normalize(s) {
-    if (!s || !Array.isArray(s.units)) return sample();
+    if (!s || !Array.isArray(s.units)) s = sample();
     s.costs = Object.assign({}, DEF_COSTS, s.costs);
     s.settings = Object.assign({}, DEF_SETTINGS, s.settings);
     s.gains = Object.assign({}, DEF_GAINS, s.gains);
+    delete s.settings.modMin; delete s.settings.modMax;
+    if (typeof s.mira !== 'number' || !isFinite(s.mira)) s.mira = 0;
     s.units.forEach(u => {
-      if (typeof u.mod !== 'number') u.mod = 0;
-      if (u.side === 'ally') ['hp', 'hpMax', 'ep', 'epMax', 'cp'].forEach(k => { if (typeof u[k] !== 'number' || !isFinite(u[k])) u[k] = 0; });
+      // Older tables stored a delay modifier (negative = faster); speed is the same number with the sign flipped.
+      if (typeof u.speed !== 'number') u.speed = typeof u.mod === 'number' ? -u.mod : 0;
+      delete u.mod;
+      if (u.side === 'ally') {
+        ['hp', 'hpMax', 'ep', 'epMax', 'cp'].forEach(k => { if (typeof u[k] !== 'number' || !isFinite(u[k])) u[k] = 0; });
+        u.sh = normSheet(u.sh, u);
+        syncSheet(u);
+      }
     });
     s.overrides = s.overrides || {};
     s.log = s.log || [];
@@ -580,20 +688,19 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
   const cmp = (a, b) => a.tick - b.tick || a.seq - b.seq;
   function queue() { return S.entries.filter(e => { const u = U(e.unitId); return u && !u.ko; }).sort(cmp); }
 
-  /* Delay = base delay adjusted by the character's modifier (negative = faster).
-     rate: each point changes how many turns you get by the same amount, so stacking speed never snowballs
-           (at 10%: −2 → ×0.83 = 20% more turns, +2 → ×1.25 = 20% fewer). Kept to one decimal.
+  /* Delay = base delay adjusted by speed (positive = faster).
+     rate: the rulebook formula, base × 10 / (10 + speed) at 10% per point. Each point is the same 10% more
+           or fewer turns, so stacking speed never snowballs (+1 → 9.1, −1 → 11.1 on a base of 10). One decimal.
      pct:  each point changes the delay itself by a fixed %. flat: each point adds or removes 1. */
-  function delay(base, mod) {
-    base = Number(base) || 0; mod = Number(mod) || 0;
+  function delay(base, speed) {
+    base = Number(base) || 0; speed = Number(speed) || 0;
     const st = S.settings;
-    if (st.mode === 'rate') return Math.max(1, r1(base * 100 / Math.max(10, 100 - mod * st.pct)));
-    const v = st.mode === 'flat' ? base + mod : base * (1 + mod * st.pct / 100);
+    if (st.mode === 'rate') return Math.max(1, r1(base * 100 / Math.max(10, 100 + speed * st.pct)));
+    const v = st.mode === 'flat' ? base - speed : base * (1 - speed * st.pct / 100);
     return Math.max(1, Math.round(v));
   }
 
   /* ---------- party resources ---------- */
-  const tracked = u => !!u && u.side === 'ally';
   function clampRes(u, k, v) {
     v = Math.round(Number(v) || 0);
     const max = k === 'cp' ? CP_CAP : u[k + 'Max'];
@@ -620,7 +727,16 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     const nf = queue()[0];
     if (S.pending && (!nf || nf.unitId !== S.pending.unitId)) S.pending = null;
   }
-  const fmtMod = m => (m > 0 ? '+' : m < 0 ? '−' : '±') + Math.abs(m);
+  function changeMira(d, who) {
+    d = Math.round(Number(d));
+    if (!isFinite(d) || !d) return false;
+    const before = S.mira;
+    S.mira = Math.max(0, Math.min(99999999, S.mira + d));
+    const n = S.mira - before;
+    if (!n) return false;
+    addLog(`${who ? who + ' ' : ''}${n < 0 ? 'spends' : 'adds'} ${Math.abs(n).toLocaleString()} mira → ${S.mira.toLocaleString()} in the agency's funds`);
+    return true;
+  }
 
   function hash(a, b) {
     let h = Math.imul(a ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(b + 0x632be5ab, 0xc2b2ae35);
@@ -641,7 +757,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     const p = S.pending, q = queue(), cur = q[0];
     if (!p || !cur || p.unitId !== cur.unitId) return null;
     const u = U(cur.unitId);
-    const d = delay(p.base, u.mod);
+    const d = delay(p.base, spd(u));
     const tick = cur.tick + d;
     const others = q.slice(1);
     const index = others.filter(e => e.tick <= tick).length; // ties land behind
@@ -658,8 +774,10 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     return `${u.name}: ${a.label}`;
   }
 
-  function addLog(text, d, bonus) {
-    S.log.push({ t: S.slot + 1, text, d: d ?? null, bonus: bonus && bonus !== 'none' ? bonus : null });
+  function addLog(text, d, bonus, sheet) {
+    const l = { t: S.slot + 1, text, d: d ?? null, bonus: bonus && bonus !== 'none' ? bonus : null };
+    if (sheet) l.sheet = true; // build changes: shown to the GM, kept out of the players' battle log
+    S.log.push(l);
     if (S.log.length > 200) S.log.shift();
   }
 
@@ -674,6 +792,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       if (kind === 'arts' && S.pending.after == null) S.pending.after = S.costs.afterCast;
       if (kind === 'arts' && S.pending.ep == null) S.pending.ep = 0;
       if (kind === 'craft' && S.pending.cp == null) S.pending.cp = S.gains.craft;
+      if (kind === 'scraft' && S.pending.emp == null) S.pending.emp = true;
     }
     save(); render();
     const f = document.getElementById('f-name') || document.getElementById('f-confirm');
@@ -689,8 +808,22 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     const epBonus = b === 'ep10' ? Math.ceil(u.epMax * .1) : b === 'ep50' ? Math.ceil(u.epMax * .5) : 0;
     if (p.kind === 'craft' && (p.cp || 0) > Math.min(CP_CAP, u.cp + cpBonus)) return { ok: false, msg: `Not enough CP: ${u.name} has ${u.cp}.` };
     if (p.kind === 'arts' && (p.ep || 0) > u.ep + epBonus) return { ok: false, msg: `Not enough EP: ${u.name} has ${u.ep}.` };
+    if (p.kind === 'scraft' && u.sLock) return { ok: false, msg: sBlock(u).msg };
     if (p.kind === 'scraft' && u.cp + cpBonus < S_MIN) return { ok: false, msg: `S-Crafts need ${S_MIN} CP: ${u.name} has ${u.cp}.` };
     return { ok: true };
+  }
+  /* Why a party member can't S-Craft or S-Break right now (null = they can). */
+  function sBlock(u) {
+    if (!tracked(u)) return null;
+    if (u.sLock) return { short: 'regular turn first', msg: `${u.name} needs a regular turn before another S-Craft.` };
+    if (u.cp < S_MIN) return { short: `${S_MIN} CP`, msg: `S-Crafts need ${S_MIN} CP (${u.name} has ${u.cp}).` };
+    return null;
+  }
+  /* Spends CP for an S-Craft: 100, or all 200 when empowered. Returns the log note. */
+  function spendS(u, emp) {
+    if (emp && u.cp >= CP_CAP) { u.cp -= CP_CAP; return ` (empowered, −${CP_CAP} CP)`; }
+    u.cp = Math.max(0, u.cp - S_MIN);
+    return ` (−${S_MIN} CP)`;
   }
 
   function confirmPending() {
@@ -705,7 +838,8 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     if (tracked(u)) {
       if (p.kind === 'craft' && p.cp) { const s = -bump(u, 'cp', -p.cp); if (s) text += ` (−${s} CP)`; }
       if (p.kind === 'arts' && p.ep) { const s = -bump(u, 'ep', -p.ep); if (s) text += ` (−${s} EP)`; }
-      if (p.kind === 'scraft') { if (u.cp >= CP_CAP) text += ' (empowered at 200 CP)'; u.cp = 0; }
+      if (p.kind === 'scraft') text += spendS(u, p.emp !== false);
+      if (p.kind === 'scraft') u.sLock = true; else delete u.sLock;
     }
     if (cur.kind === 'cast' || p.kind === 'resolve') { cur.kind = 'turn'; delete cur.art; delete cur.after; }
     if (p.kind === 'arts') { cur.kind = 'cast'; cur.art = p.name || 'Arts'; cur.after = p.after ?? S.costs.afterCast; }
@@ -720,7 +854,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     const u = U(id), e = E(id); if (!u || !e) return;
     const front = queue()[0];
     const step = Number(S.settings.step) || 1;
-    if (cmd === 'sbreak' && tracked(u) && u.cp < S_MIN) return;
+    if (cmd === 'sbreak' && sBlock(u)) return;
     snapshot();
     if (cmd === 'delay') {
       e.tick = r1(e.tick + step); e.seq = ++S.seqN; addLog(`${u.name} is delayed`, step);
@@ -736,7 +870,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       if (e.kind === 'cast') addLog(`${u.name} drops ${e.art}`);
       e.kind = 'turn'; delete e.art; delete e.after; e.sbreak = true;
       addLog(`${u.name} S-Breaks and takes the current turn`);
-      S.pending = { unitId: u.id, kind: 'scraft', name: '', base: S.costs.scraft };
+      S.pending = { unitId: u.id, kind: 'scraft', name: '', base: S.costs.scraft, emp: true };
     } else if (cmd === 'impede') {
       if (e.kind === 'cast') { addLog(`${u.name}'s ${e.art} is impeded`); e.kind = 'turn'; delete e.art; delete e.after; }
       if (S.pending && S.pending.unitId === id) S.pending = null;
@@ -745,7 +879,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       if (!u.ko) {
         const nf = queue().filter(x => x !== e)[0];
         const base = nf ? nf.tick : S.now;
-        if (e.tick < base) { e.tick = r1(base + delay(S.costs.attack, u.mod)); e.seq = ++S.seqN; }
+        if (e.tick < base) { e.tick = r1(base + delay(S.costs.attack, spd(u))); e.seq = ++S.seqN; }
         e.kind = 'turn'; delete e.art; e.sbreak = false;
         if (tracked(u) && u.hpMax > 0 && u.hp === 0) u.hp = 1;
       }
@@ -763,10 +897,10 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
   function newBattle() {
     snapshot();
     S.now = 0; S.slot = 0; S.seed = (Math.random() * 2 ** 31) | 0; S.overrides = {}; S.pending = null;
-    S.units.forEach(u => { u.ko = false; });
+    S.units.forEach(u => { u.ko = false; delete u.sLock; });
     S.entries.forEach(e => {
       const u = U(e.unitId);
-      e.tick = Math.round(delay(S.costs.attack, u.mod) * Math.random());
+      e.tick = Math.round(delay(S.costs.attack, spd(u)) * Math.random());
       e.seq = ++S.seqN; e.kind = 'turn'; delete e.art; delete e.after; e.sbreak = false;
     });
     S.log = []; addLog('A new battle begins.');
@@ -850,10 +984,10 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
   function actBtn(kind, u) {
     const a = ACTIONS[kind];
     const on = S.pending && S.pending.kind === kind ? ' on' : '';
-    const d = kind === 'custom' ? 'any delay' : '+' + fmtT(delay(S.costs[a.cost], u.mod));
-    const locked = kind === 'scraft' && tracked(u) && u.cp < S_MIN;
-    const extra = kind === 'scraft' && tracked(u) ? (u.cp >= CP_CAP ? ' · 200!' : locked ? ` · ${S_MIN} CP` : '') : '';
-    return `<button class="actbtn${on}${kind === 'scraft' ? ' scraft' : ''}" data-act="${kind}" ${locked ? `disabled title="Needs ${S_MIN} CP"` : ''}><b>${a.label}${a.named ? '…' : ''}</b><span>${d}${extra}</span></button>`;
+    const d = kind === 'custom' ? 'any delay' : '+' + fmtT(delay(S.costs[a.cost], spd(u)));
+    const why = kind === 'scraft' ? sBlock(u) : '';
+    const extra = kind === 'scraft' && tracked(u) ? (why ? ` · ${why.short}` : u.cp >= CP_CAP ? ' · 200!' : '') : '';
+    return `<button class="actbtn${on}${kind === 'scraft' ? ' scraft' : ''}" data-act="${kind}" ${why ? `disabled title="${esc(why.msg)}"` : ''}><b>${a.label}${a.named ? '…' : ''}</b><span>${d}${extra}</span></button>`;
   }
 
   function renderAct() {
@@ -863,7 +997,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     const u = U(cur.unitId), b = bonusAt(S.slot), cast = cur.kind === 'cast';
     let h = `<div class="panel-head"><h3>Current turn · ${S.slot + 1}</h3></div>
       <div class="acthead"><span class="ico ${cast ? 'cast' : u.side}">${iconFor(cur.kind, u)}</span>
-        <div><div class="eyebrow">${u.side === 'ally' ? 'Party' : 'Enemy'} · Delay mod <span class="num">${fmtMod(u.mod)}</span>${cur.sbreak ? ' · S-Break' : ''}</div>
+        <div><div class="eyebrow">${u.side === 'ally' ? 'Party' : 'Enemy'} · Speed <span class="num">${fmtMod(spd(u))}</span>${tracked(u) ? ` · Crit <span class="num">${critText(derive(u).crit)}</span>` : ''}${cur.sbreak ? ' · S-Break' : ''}</div>
         <h2>${esc(cast ? cur.art : u.name)}${cast ? ` <span class="muted" style="font-size:.9rem">(${esc(u.name)})</span>` : ''}</h2></div></div>`;
     if (tracked(u)) h += `<div>${resRows(u)}</div>`;
     if (b !== 'none') h += `<div class="bonusnote">${chipHtml(b)}<span>${BONUS[b].desc}</span></div>`;
@@ -885,6 +1019,8 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
           ${p.kind === 'arts' ? `<label>After-cast<input type="number" id="f-after" min="0" max="99" value="${p.after}"></label>` : ''}
           ${p.kind === 'craft' && tracked(pv.u) ? `<label>CP cost<input type="number" id="f-cp" min="0" max="200" value="${p.cp || 0}"></label>` : ''}
           ${p.kind === 'arts' && tracked(pv.u) ? `<label>EP cost<input type="number" id="f-ep" min="0" max="999" value="${p.ep || 0}"></label>` : ''}
+          ${p.kind === 'scraft' && tracked(pv.u) && pv.u.cp >= CP_CAP ? `<label class="inline"><input type="checkbox" id="f-emp" ${p.emp !== false ? 'checked' : ''}> Empowered (spends all 200 CP)</label>` : ''}
+          ${p.kind === 'scraft' && tracked(pv.u) && pv.u.cp < CP_CAP ? `<span class="muted" style="font-size:.85rem">Spends ${S_MIN} CP (${pv.u.cp} → ${Math.max(0, pv.u.cp - S_MIN)})</span>` : ''}
         </div>`}
         <div class="landing" id="landing">${landingHtml(pv)}</div>
         <p class="errtext" id="f-cost" ${costCheck(p, pv.u).ok ? 'hidden' : ''}>${esc(costCheck(p, pv.u).msg || '')}</p>
@@ -917,19 +1053,19 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       return `<tr class="${u.ko ? 'ko' : ''} ${isCur ? 'current' : ''}">
         <td><span class="sideicon ${u.side}" title="${u.side === 'ally' ? 'Party' : 'Enemy'}">${u.side === 'ally' ? ICON.shield : ICON.swords}</span></td>
         <td><input class="nameinput" type="text" id="name-${u.id}" value="${esc(u.name)}" data-uf="name" data-id="${u.id}" aria-label="Name"></td>
-        <td><input type="number" id="mod-${u.id}" value="${u.mod}" min="${st.modMin}" max="${st.modMax}" step="1" data-uf="mod" data-id="${u.id}" aria-label="Delay modifier"></td>
+        <td>${tracked(u) ? `<span class="num" title="Set on ${esc(u.name)}'s sheet">${fmtMod(spd(u))}</span>` : `<input type="number" id="spd-${u.id}" value="${u.speed}" min="-9" max="9" step="1" data-uf="speed" data-id="${u.id}" aria-label="Speed">`}</td>
         <td class="status">${status}</td>
         <td><div class="rowbtns">
           <button class="btn small" data-r="hasten" data-id="${u.id}" title="Hasten by the delay step" ${u.ko || isCur ? 'disabled' : ''}>−</button>
           <button class="btn small" data-r="delay" data-id="${u.id}" title="Delay by the delay step" ${u.ko ? 'disabled' : ''}>+</button>
-          <button class="btn small gold" data-r="sbreak" data-id="${u.id}" title="${tracked(u) && u.cp < S_MIN ? `S-Break needs ${S_MIN} CP (has ${u.cp})` : 'S-Break: take the current turn now'}" ${u.ko || (tracked(u) && u.cp < S_MIN) ? 'disabled' : ''}>S-Break</button>
+          <button class="btn small gold" data-r="sbreak" data-id="${u.id}" title="${esc(sBlock(u) ? sBlock(u).msg : 'S-Break: take the current turn now')}" ${u.ko || sBlock(u) ? 'disabled' : ''}>S-Break</button>
           ${e.kind === 'cast' && !u.ko ? `<button class="btn small" data-r="impede" data-id="${u.id}" title="Cancel the art being cast">Impede</button>` : ''}
           <button class="btn small" data-r="ko" data-id="${u.id}">${u.ko ? 'Revive' : 'KO'}</button>
           <button class="btn small warn" data-r="remove" data-id="${u.id}" title="Remove from battle" aria-label="Remove ${esc(u.name)}">✕</button>
         </div></td></tr>`;
     }).join('');
     document.getElementById('roster').innerHTML =
-      `<thead><tr><th></th><th>Name</th><th title="Delay modifier">Mod</th><th>Next</th><th>Controls</th></tr></thead><tbody>${rows ||
+      `<thead><tr><th></th><th>Name</th><th title="Speed: + is faster">Speed</th><th>Next</th><th>Controls</th></tr></thead><tbody>${rows ||
       '<tr><td colspan="5" class="muted">No combatants yet.</td></tr>'}</tbody>`;
   }
 
@@ -939,14 +1075,14 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     set('set-show', st.show); document.getElementById('showVal').textContent = st.show;
     set('set-rate', st.rate); document.getElementById('rateVal').textContent = st.rate + '%';
     set('set-numbers', st.numbers); set('set-step', st.step);
-    set('set-mode', st.mode); set('set-pct', st.pct); set('set-modmin', st.modMin); set('set-modmax', st.modMax);
+    set('set-mode', st.mode); set('set-pct', st.pct);
     document.getElementById('pctWrap').hidden = st.mode === 'flat';
     const base = S.costs.attack;
     const mods = [];
-    for (let m = st.modMin; m <= st.modMax; m++) mods.push(`<b>${fmtMod(m)}</b> → ${fmtT(delay(base, m))}`);
-    document.getElementById('modExample').innerHTML = `Attack (base ${base}): ${mods.join(' · ')}. ` +
-      (st.mode === 'rate' ? `Each point gives ${st.pct}% fewer turns (+) or more turns (−), so stacking speed never snowballs.` :
-       st.mode === 'pct' ? `Each point changes every delay by ${st.pct}%.` : 'Each point adds or removes 1 from every delay.') + ' Delays never drop below 1.';
+    for (let m = -2; m <= 2; m++) mods.push(`<b>${fmtMod(m)}</b> → ${fmtT(delay(base, m))}`);
+    document.getElementById('modExample').innerHTML = `Attack (base ${base}) at speed ${mods.join(' · ')}. ` +
+      (st.mode === 'rate' ? (st.pct === 10 ? 'This is the rulebook formula, base × 10 / (10 + speed): each point is 10% more turns (+) or fewer (−), so stacking speed never snowballs.' : `Each point gives ${st.pct}% more turns (+) or fewer (−).`) :
+       st.mode === 'pct' ? `Each point changes every delay by ${st.pct}%.` : 'Each point adds or removes 1 from every delay.') + ' Delays never drop below 1. Party speed comes from each sheet; set enemy speed in the Combatants list.';
     const costs = document.getElementById('costs');
     if (!costs.contains(document.activeElement)) costs.innerHTML = Object.keys(COST_LABELS).map(k =>
       `<label>${COST_LABELS[k]}<input type="number" id="cost-${k}" min="0" max="99" value="${S.costs[k]}" data-cost="${k}"></label>`).join('');
@@ -956,17 +1092,17 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     document.getElementById('undoBtn').disabled = !undoStack.length;
   }
 
-  function logHtml(nums, limit) {
-    const items = S.log.slice(-limit).reverse();
+  function logHtml(nums, limit, gm) {
+    const items = S.log.filter(l => gm || !l.sheet).slice(-limit).reverse();
     if (!items.length) return '<li class="empty">Nothing has happened yet.</li>';
     return items.map(l => {
       const d = nums && l.d != null ? ` (${l.d > 0 ? '+' : '−'}${fmtT(Math.abs(l.d))})` : '';
-      return `<li><span class="t">${l.t ? '#' + l.t : ''}</span><span>${esc(l.text)}${d}</span>${chipHtml(l.bonus)}</li>`;
+      return `<li><span class="t">${l.t ? '#' + l.t : ''}</span><span>${esc(l.text)}${d}${l.sheet ? ' <span class="tag linked">SHEET</span>' : ''}</span>${chipHtml(l.bonus)}</li>`;
     }).join('');
   }
   function renderLog() {
-    if (!PLAYER) document.getElementById('log').innerHTML = logHtml(true, 80);
-    document.getElementById('plog').innerHTML = logHtml(S.settings.numbers, 12);
+    if (!PLAYER) document.getElementById('log').innerHTML = logHtml(true, 80, true);
+    document.getElementById('plog').innerHTML = logHtml(S.settings.numbers, 12, false);
   }
 
   /* ---------- party resources: bars, GM party view, phones ---------- */
@@ -988,6 +1124,12 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     if (!PLAYER && u.claim) t.push('<span class="tag linked" title="A phone is linked to this character">PHONE</span>');
     return `<span class="tags">${t.join('')}</span>`;
   }
+  /* One line of the numbers people look up mid-fight. */
+  function metaLine(u) {
+    const d = derive(u);
+    return `<div class="pmeta"><span>Speed <b>${fmtMod(d.speed)}</b></span><span>Crit <b>${critText(d.crit)}</b></span><span>Art DC <b>${d.artDC}</b></span><span>AC <b>${d.ac}</b></span></div>`;
+  }
+  const miraText = () => `${S.mira.toLocaleString()} mira`;
   function renderParty() {
     const el = $('party');
     const allies = S.units.filter(tracked);
@@ -998,18 +1140,84 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     if (editable && el.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return;
     const cards = allies.map(u => {
       const cls = ['pcard', u.ko ? 'ko' : '', cur && cur.unitId === u.id ? 'current' : ''].join(' ');
-      let h = `<div class="${cls}"><div class="pname"><span>${esc(u.name)}</span>${partyTags(u)}</div>${resRows(u)}`;
+      let h = `<div class="${cls}"><div class="pname"><span>${esc(u.name)}</span>${partyTags(u)}</div>${resRows(u)}${metaLine(u)}`;
       if (editable) {
-        const f = (k, label) => `<input type="number" id="pf-${k}-${u.id}" value="${u[k]}" min="0" data-pf="${k}" data-id="${u.id}" aria-label="${esc(u.name)} ${label}">`;
+        const f = (k, label, v) => `<input type="number" id="pf-${k}-${u.id}" value="${v ?? u[k]}" min="0" data-pf="${k}" data-id="${u.id}" aria-label="${esc(u.name)} ${label}">`;
         h += `<div class="pedit"><span></span><span class="hd">Now</span><span class="hd">Max</span>
           <span class="rk">HP</span>${f('hp', 'HP')}${f('hpMax', 'max HP')}
           <span class="rk">EP</span>${f('ep', 'EP')}${f('epMax', 'max EP')}
           <span class="rk">CP</span>${f('cp', 'CP')}<span class="muted">of ${CP_CAP}</span></div>
-          <div class="qbtns">${['hit', 'crit', 'hurt', 'big'].map(g => `<button class="btn small gold" data-pq="${g}" data-id="${u.id}" title="${GAIN_TEXT[g]}">+${S.gains[g]} ${g === 'hit' ? 'Hit' : g === 'crit' ? 'Crit' : g === 'hurt' ? 'Hurt' : 'Big hit'}</button>`).join('')}</div>`;
+          <div class="qbtns">${GAIN_KEYS.map(g => `<button class="btn small gold" data-pq="${g}" data-id="${u.id}" title="${GAIN_TEXT[g]}">+${S.gains[g]} ${GAIN_BTN[g]}</button>`).join('')}</div>
+          <div><button class="btn small" data-sheet="${u.id}">${gmSheetId === u.id ? 'Sheet open below' : 'Open sheet'}</button></div>`;
       }
       return h + '</div>';
     }).join('');
-    el.innerHTML = `<div class="panel-head"><h3>Party</h3>${editable ? '<span class="muted" style="font-size:.82rem">Players can update their own character from their phones.</span>' : ''}</div><div class="partygrid">${cards}</div>`;
+    const mira = editable ? `<label class="inline">Agency funds <input type="number" id="mira" min="0" value="${S.mira}" style="width:7em" aria-label="Mira"> mira</label>`
+      : `<span class="muted">Agency funds <b class="num" style="color:var(--gold)">${miraText()}</b></span>`;
+    el.innerHTML = `<div class="panel-head"><h3>Party</h3>${mira}</div><div class="partygrid">${cards}</div>`;
+  }
+
+  /* ---------- the character sheet (GM panel and phones share this) ---------- */
+  let gmSheetId = null;
+  function sheetHtml(u, pre) {
+    const sh = u.sh, d = derive(u);
+    const num = (k, extra) => `<input type="number" id="${pre}-${k}" value="${sh[k]}" min="${SHEET_FIELDS[k][0]}" max="${SHEET_FIELDS[k][1]}" data-sh="${k}" data-id="${u.id}" inputmode="numeric" ${extra || ''}>`;
+    const abil = ABIL.map(a => `<label class="ab"><span class="abk">${ABIL_LABEL[a]}</span>${num(a)}<span class="abm num" id="${pre}-m-${a}">${fmtSigned(d.mods[a])}</span></label>`).join('');
+    return `<div class="sheet">
+      <div class="shrow">
+        <label>Level ${num('lvl')}</label>
+        <label class="grow">Frame <input type="text" id="${pre}-frame" value="${esc(sh.frame)}" maxlength="40" data-sh="frame" data-id="${u.id}" placeholder="e.g. Vanguard" autocomplete="off"></label>
+        <label>Frame speed <select id="${pre}-fspd" data-sh="fspd" data-id="${u.id}">${[-1, 0, 1].map(v => `<option value="${v}" ${sh.fspd === v ? 'selected' : ''}>${fmtMod(v)}</option>`).join('')}</select></label>
+      </div>
+      <div class="abil">${abil}</div>
+      <div class="shrow">
+        <label>Max HP ${num('hpBase')}</label>
+        <label>Max EP ${num('epBase')}</label>
+        <label>Base AC ${num('acBase')}</label>
+        <label>Movement ${num('mv')}</label>
+      </div>
+      <div class="derived" id="${pre}-der">${derivedHtml(u)}</div>
+    </div>`;
+  }
+  function derivedHtml(u) {
+    const d = derive(u);
+    const c = (k, v, t) => `<span class="dchip" ${t ? `title="${esc(t)}"` : ''}><span class="k">${k}</span><b>${v}</b></span>`;
+    return [
+      c('Proficiency', fmtSigned(d.prof)),
+      c('Art attack', fmtSigned(d.artAtk), 'Single-target attack arts: d20 + proficiency + INT vs AC'),
+      c('Art DC', d.artDC, '8 + proficiency + INT: area attack arts and debuffs'),
+      c('Heals & revives', fmtSigned(d.wis), 'Add your WIS modifier to heals and revives'),
+      c('Buff turns', fmtSigned(d.wis), 'Your buffs last their listed turns + WIS'),
+      c('Ailments on you', fmtSigned(-d.wis) + ' turns', 'Ailments and stat downs last their listed turns − your WIS (minimum 1)'),
+      c('Weapon crit', critText(d.crit) + ' · ×1.5', 'Crit on 20 − your CHA modifier (if positive), never below 17. Weapon crits deal 1.5× damage.'),
+      c('Speed', fmtMod(d.speed)),
+      c('AC', d.ac),
+      c('Move', d.mv + ' sq')
+    ].join('');
+  }
+  /* Rebuild a sheet unless someone is typing in it; the worked-out numbers always refresh. */
+  function fillSheet(el, u, pre) {
+    const key = u.id;
+    if (el.dataset.key !== key || !el.contains(document.activeElement)) { el.innerHTML = sheetHtml(u, pre); el.dataset.key = key; return; }
+    const der = $(pre + '-der'); if (der) der.innerHTML = derivedHtml(u);
+    const d = derive(u);
+    ABIL.forEach(a => { const m = $(`${pre}-m-${a}`); if (m) m.textContent = fmtSigned(d.mods[a]); });
+  }
+  function renderSheetPanel() {
+    const el = $('sheetPanel');
+    const u = gmSheetId ? U(gmSheetId) : null;
+    if (!u || !tracked(u) || isPresent()) { el.hidden = true; gmSheetId = u && tracked(u) ? gmSheetId : null; return; }
+    el.hidden = false;
+    const allies = S.units.filter(tracked);
+    const head = $('sheetHead');
+    const hk = allies.map(a => a.id + a.name).join(',') + '|' + u.id;
+    if (head.dataset.key !== hk) {
+      head.dataset.key = hk;
+      head.innerHTML = `<h3>Character sheet</h3><div class="tools">
+        <select id="sheet-pick" aria-label="Character">${allies.map(a => `<option value="${a.id}" ${a.id === u.id ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select>
+        <button class="btn small ghost" data-cmd="closesheet">Close</button></div>`;
+    }
+    fillSheet($('sheetBody'), u, 'gs');
   }
 
   /* Resource changes, from the GM's party view or a player's phone. */
@@ -1043,13 +1251,16 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       const d = Math.round(Number(r.d));
       if (isFinite(d) && d !== 0 && Math.abs(d) <= 9999) changed = resChange(u, r.f, d);
     } else if (r.type === 'gain' && GAIN_TEXT[r.g]) changed = cpGain(u, r.g);
+    else if (r.type === 'sheet') changed = applySheet(u, r.f, r.v);
+    else if (r.type === 'mira') changed = changeMira(r.d, u.name);
     if (!changed) { undoStack.pop(); return render(); }
     keepPendingValid();
     commit();
   }
 
   /* The player's own character panel in the ATB tab (phones only). */
-  let amKey = null, amSwitch = false, amWaiting = false;
+  let amKey = null, amSwitch = false, amWaiting = false, amTab = 'combat';
+  try { const t = localStorage.getItem('atb-am-tab'); if (t === 'sheet' || t === 'combat') amTab = t; } catch (e) {}
   function renderAtbMe() {
     const el = $('atbMe');
     const allies = S.units.filter(tracked);
@@ -1058,12 +1269,15 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     const cur = queue()[0];
     const myTurn = !!(me && cur && cur.unitId === me.id && cur.kind !== 'cast');
     el.classList.toggle('myturn', myTurn);
-    const key = [authFailed, !!myUid, me ? me.id + me.name : '', amSwitch, amWaiting, me && !amSwitch ? '' : allies.map(u => u.id + (u.claim ? '*' : '') + u.name).join(',')].join('|');
+    const key = [authFailed, !!myUid, me ? me.id + me.name : '', amSwitch, amWaiting, amTab, me && !amSwitch ? '' : allies.map(u => u.id + (u.claim ? '*' : '') + u.name).join(',')].join('|');
     if (key !== amKey) { amKey = key; el.innerHTML = amHtml(me, allies); }
     if (!me || amSwitch) return;
     $('am-res').innerHTML = resRows(me);
+    $('am-meta').innerHTML = metaLine(me);
     $('am-tags').innerHTML = partyTags(me);
     $('am-status').textContent = amStatus(me, cur);
+    if (amTab === 'sheet') fillSheet($('am-sheet'), me, 'ps');
+    else { const m = $('am-mira'); if (m) m.textContent = miraText(); }
   }
   function amHtml(me, allies) {
     if (authFailed) return `<h3>Your character</h3><p class="muted">Updating from this phone isn't available right now. Tell the GM your HP, EP and CP out loud.</p>`;
@@ -1081,10 +1295,17 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
         </form>
         <p class="muted">This phone remembers your pick.</p><p class="errtext" id="amErr" hidden></p>`;
     }
-    return `<div class="panel-head"><div class="big">${esc(me.name)}</div><span id="am-tags"></span></div>
+    const tabs = `<div class="tabs amtabs" role="tablist">${[['combat', 'Combat'], ['sheet', 'Sheet']].map(([k, l]) =>
+      `<button role="tab" data-am="tab" data-tab="${k}" aria-selected="${amTab === k}">${l}</button>`).join('')}</div>`;
+    const top = `<div class="panel-head"><div class="big">${esc(me.name)}</div><span id="am-tags"></span></div>
       <p class="muted" id="am-status"></p>
-      <div class="grp" id="am-res"></div>
-      <label class="amount">Amount <input type="number" id="am-amt" inputmode="numeric" min="0" max="9999" placeholder="0"></label>
+      <div class="grp" id="am-res"></div><div id="am-meta"></div>${tabs}`;
+    if (amTab === 'sheet') return top + `<div id="am-sheet"></div>
+      <p class="muted" style="font-size:.85rem">Changes go straight to your sheet; the GM sees each one.</p>
+      <p class="errtext" id="amErr" hidden></p>
+      <div><button class="btn small ghost" data-am="switch">Not you?</button></div>`;
+    return top + `
+      <label class="amount">Amount <input type="number" id="am-amt" inputmode="numeric" min="0" max="999999" placeholder="0"></label>
       <div class="grp"><h3>HP</h3><div class="qbtns">
         <button class="btn warn" data-am="res" data-f="hp" data-s="-1">Take damage</button>
         <button class="btn" data-am="res" data-f="hp" data-s="1">Heal</button></div></div>
@@ -1092,9 +1313,12 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
         <button class="btn" data-am="res" data-f="ep" data-s="-1">Spend EP</button>
         <button class="btn" data-am="res" data-f="ep" data-s="1">Restore EP</button></div></div>
       <div class="grp"><h3>CP</h3><div class="qbtns">
-        ${['hit', 'crit', 'hurt', 'big'].map(g => `<button class="btn gold" data-am="gain" data-g="${g}">+${S.gains[g]} ${g === 'hit' ? 'Landed a hit' : g === 'crit' ? 'Crit' : g === 'hurt' ? 'Took a hit' : 'Big hit'}</button>`).join('')}
+        ${GAIN_KEYS.map(g => `<button class="btn gold" data-am="gain" data-g="${g}">+${S.gains[g]} ${GAIN_BTN_PHONE[g]}</button>`).join('')}
         <button class="btn" data-am="res" data-f="cp" data-s="-1">Spend CP</button>
         <button class="btn" data-am="res" data-f="cp" data-s="1">Add CP</button></div></div>
+      <div class="grp"><h3>Agency funds · <span class="num" id="am-mira" style="color:var(--gold)">${miraText()}</span></h3><div class="qbtns">
+        <button class="btn" data-am="mira" data-s="-1">Spend mira</button>
+        <button class="btn" data-am="mira" data-s="1">Add mira</button></div></div>
       <p class="errtext" id="amErr" hidden></p>
       <div><button class="btn small ghost" data-am="switch">Not you?</button></div>`;
   }
@@ -1134,7 +1358,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     if (!S) return;
     renderTimeline(); renderLog(); renderParty();
     if (PLAYER) renderAtbMe();
-    else { renderAct(); renderRoster(); renderSettings(); renderShare(); }
+    else { renderSheetPanel(); renderAct(); renderRoster(); renderSettings(); renderShare(); }
   }
 
   /* ================= D&D initiative ================= */
@@ -1220,7 +1444,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
   /* A request sent from a player's phone (already checked by the database rules to come from that phone). */
   function handleRequest(r) {
     if (!r || !r.uid) return;
-    if (r.type === 'claim' || r.type === 'res' || r.type === 'gain') return handleAtbRequest(r);
+    if (['claim', 'res', 'gain', 'sheet', 'mira'].includes(r.type)) return handleAtbRequest(r);
     if (!D) return;
     if (r.type === 'init') {
       dSnap();
@@ -1578,7 +1802,13 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       const me = S && myUid ? S.units.find(u => tracked(u) && u.claim === myUid) : null;
       if (k === 'switch') { amSwitch = true; amKey = null; return renderAtbMe(); }
       if (k === 'cancel') { amSwitch = false; amKey = null; return renderAtbMe(); }
+      if (k === 'tab') { amTab = a.dataset.tab; try { localStorage.setItem('atb-am-tab', amTab); } catch (e) {} return renderAtbMe(); }
       if (!me) return;
+      if (k === 'mira') {
+        const inp = $('am-amt'), n = Math.round(Number(inp && inp.value));
+        if (!n || n < 0) { const e = $('amErr'); e.hidden = false; e.textContent = 'Type an amount first.'; if (inp) inp.focus(); return; }
+        return amSend({ type: 'mira', cid: me.id, d: n * Number(a.dataset.s) }, a).then(ok => { if (ok && inp) inp.value = ''; });
+      }
       if (k === 'gain') return amSend({ type: 'gain', cid: me.id, g: a.dataset.g }, a);
       if (k === 'res') {
         const inp = $('am-amt'), n = Math.round(Number(inp && inp.value));
@@ -1587,11 +1817,18 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       }
       return;
     }
+    const so = ev.target.closest('[data-sheet]');
+    if (so) {
+      gmSheetId = so.dataset.sheet; render();
+      const sp = $('sheetPanel'); if (sp && sp.scrollIntoView) sp.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    if (ev.target.closest('[data-cmd="closesheet"]')) { gmSheetId = null; return render(); }
     const pq = ev.target.closest('[data-pq]');
     if (pq) {
       const u = U(pq.dataset.id); if (!tracked(u)) return;
       snapshot();
-      if (cpGain(u, pq.dataset.g)) commit(); else undoStack.pop();
+      if (cpGain(u, pq.dataset.pq)) commit(); else undoStack.pop();
       return;
     }
     const t = ev.target.closest('[data-act],[data-r],[data-d],[data-cmd],.slot[data-slot]');
@@ -1622,7 +1859,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       if (c === 'present') { document.body.classList.toggle('present'); lastFront = null; return render(); }
       if (c === 'fullscreen') return fullscreen();
       if (c === 'reroll') { snapshot(); S.seed = (Math.random() * 2 ** 31) | 0; S.overrides = {}; addLog('Upcoming AT bonuses rerolled'); return commit(); }
-      if (c === 'reset') { snapshot(); S = sample(); return commit(); }
+      if (c === 'reset') { snapshot(); S = normalize(sample()); gmSheetId = null; return commit(); }
       if (c === 'golive') return Sync.goLive(Sync.code || readLiveCode());
       if (c === 'newcode') return Sync.goLive(null);
       if (c === 'stoplive') return Sync.stop();
@@ -1709,32 +1946,48 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     if (ev.target.id === 'addForm') {
       const name = document.getElementById('add-name').value.trim(); if (!name) return;
       const side = document.getElementById('add-side').value;
-      const mod = clampMod(document.getElementById('add-mod').value);
+      const speed = clampSpd(document.getElementById('add-mod').value);
       const now = document.getElementById('add-now').checked;
       snapshot();
       const id = 'u' + (S.idN++);
-      S.units.push(side === 'ally' ? { id, name, side, mod, hp: 0, hpMax: 0, ep: 0, epMax: 0, cp: 0 } : { id, name, side, mod });
+      const nu = side === 'ally' ? { id, name, side, speed: 0, hp: 0, hpMax: 0, ep: 0, epMax: 0, cp: 0 } : { id, name, side, speed };
+      if (side === 'ally') { nu.sh = normSheet({ fspd: speed }, nu); nu.sh.fspd = cleanSheet('fspd', speed); }
+      S.units.push(nu);
       const front = queue()[0];
       const e = { unitId: id, kind: 'turn', seq: ++S.seqN };
       if (front && now) { e.tick = front.tick; e.seq = front.seq + 0.001; S.pending = null; }
-      else e.tick = r1((front ? front.tick : S.now) + delay(S.costs.attack, mod));
+      else e.tick = r1((front ? front.tick : S.now) + delay(S.costs.attack, spd(nu)));
       S.entries.push(e);
       addLog(`${name} joins the battle`);
       document.getElementById('add-name').value = '';
       commit();
     }
   });
-  const clampMod = v => Math.max(S.settings.modMin, Math.min(S.settings.modMax, Math.round(Number(v) || 0)));
+  const clampSpd = v => Math.max(-9, Math.min(9, Math.round(Number(v) || 0)));
 
+  /* Panels skip redrawing while you type in them; catch up once focus leaves. If focus left because a
+     button is being pressed, wait until the click has landed so the redraw can't swallow it. */
+  let ptrDown = false, refreshQueued = false;
+  function refreshAfterEdit() {
+    if (dRosterDirty && MODE === 'dnd' && !PLAYER) renderDRoster();
+    if (MODE === 'atb' && S) {
+      if (!PLAYER) { renderParty(); renderSheetPanel(); }
+      else renderAtbMe();
+    }
+  }
+  document.addEventListener('pointerdown', () => { ptrDown = true; }, true);
+  document.addEventListener('pointerup', () => {
+    ptrDown = false;
+    if (refreshQueued) { refreshQueued = false; setTimeout(refreshAfterEdit, 0); }
+  }, true);
   document.addEventListener('focusout', () => {
-    setTimeout(() => {
-      if (dRosterDirty && MODE === 'dnd' && !PLAYER) renderDRoster();
-      if (MODE === 'atb' && !PLAYER && S) renderParty();
-    }, 0);
+    if (ptrDown) refreshQueued = true;
+    else setTimeout(refreshAfterEdit, 0);
   });
   document.addEventListener('input', ev => {
     if (PLAYER) { if (ev.target.id === 'me-init') ev.target.dataset.touched = '1'; return; }
     const t = ev.target;
+    if (S.pending && t.id === 'f-emp') { S.pending.emp = t.checked; return save(); }
     if (S.pending && (t.id === 'f-name' || t.id === 'f-base' || t.id === 'f-after' || t.id === 'f-cp' || t.id === 'f-ep')) {
       if (t.id === 'f-name') S.pending.name = t.value;
       if (t.id === 'f-base') S.pending.base = Math.max(0, Number(t.value) || 0);
@@ -1760,7 +2013,24 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     const t = ev.target;
     if (PLAYER) {
       if (t.id === 'me-pick') { const w = $('me-newwrap'); if (w) w.hidden = t.value !== ''; }
+      if (t.dataset.sh && S) {
+        const u = U(t.dataset.id);
+        if (u && u.claim === myUid) amSend({ type: 'sheet', cid: u.id, f: t.dataset.sh, v: t.value });
+      }
       return;
+    }
+    if (t.dataset.sh) {
+      const u = U(t.dataset.id); if (!tracked(u)) return;
+      snapshot();
+      if (applySheet(u, t.dataset.sh, t.value)) { keepPendingValid(); return commit(); }
+      undoStack.pop(); return render();
+    }
+    if (t.id === 'sheet-pick') { gmSheetId = t.value; return render(); }
+    if (t.id === 'mira') {
+      const v = Math.max(0, Math.round(Number(t.value) || 0));
+      snapshot();
+      if (changeMira(v - S.mira, 'GM')) return commit();
+      undoStack.pop(); return render();
     }
     if (t.dataset.df) {
       const c = C(t.dataset.id); if (!c) return;
@@ -1777,10 +2047,10 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       const k = t.dataset.pf;
       snapshot();
       if (k === 'hpMax' || k === 'epMax') {
-        const r = k.slice(0, 2), old = u[k];
-        u[k] = Math.max(0, Math.round(Number(t.value) || 0));
-        if (!old && !u[r]) u[r] = u[k]; // first time a max is set, start full
-        u[r] = clampRes(u, r, u[r]);
+        // The max lives on the sheet; the box shows the total, so take off anything quartz adds.
+        const base = k === 'hpMax' ? 'hpBase' : 'epBase';
+        const extra = u[k] - u.sh[base];
+        if (!applySheet(u, base, Math.round(Number(t.value) || 0) - extra)) { undoStack.pop(); return render(); }
       } else {
         const before = u[k];
         u[k] = clampRes(u, k, t.value);
@@ -1793,7 +2063,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
       const u = U(t.dataset.id); if (!u) return;
       snapshot();
       if (t.dataset.uf === 'name') { const v = t.value.trim(); if (v) u.name = v; }
-      if (t.dataset.uf === 'mod') u.mod = clampMod(t.value);
+      if (t.dataset.uf === 'speed') u.speed = clampSpd(t.value);
       return commit();
     }
     const k = t.dataset.set;
@@ -1801,13 +2071,6 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
     if (k === 'step') { st.step = Math.max(1, Number(t.value) || 1); return save(); }
     if (k === 'mode') { snapshot(); st.mode = t.value; return commit(); }
     if (k === 'pct') { snapshot(); st.pct = Number(t.value) || 10; return commit(); }
-    if (k === 'modMin' || k === 'modMax') {
-      snapshot();
-      st.modMin = Math.min(0, Math.max(-9, Math.round(Number(document.getElementById('set-modmin').value) || 0)));
-      st.modMax = Math.max(0, Math.min(9, Math.round(Number(document.getElementById('set-modmax').value) || 0)));
-      S.units.forEach(u => { u.mod = clampMod(u.mod); });
-      return commit();
-    }
     if (t.dataset.cost) { snapshot(); S.costs[t.dataset.cost] = Math.max(0, Number(t.value) || 0); return commit(); }
   });
 
