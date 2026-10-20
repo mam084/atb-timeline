@@ -559,7 +559,6 @@ td .stlist { margin-top: 4px; }
           <input type="range" id="set-rate" min="0" max="60" step="5" data-set="rate">
         </label>
         <label class="inline"><input type="checkbox" id="set-numbers" data-set="numbers"> Show AT numbers to players</label>
-        <label class="inline"><input type="checkbox" id="set-autoact" data-set="autoAct"> Players' actions go through without me confirming</label>
         <div><button class="btn small" data-cmd="reroll">Reroll upcoming bonuses</button></div>
         <h3>Base delay for each action</h3>
         <div class="costs" id="costs"></div>
@@ -619,7 +618,7 @@ td .stlist { margin-top: 4px; }
   };
   const COST_LABELS = { attack: 'Attack', craft: 'Craft', castTime: 'Arts cast', afterCast: 'Arts after-cast', item: 'Item', move: 'Move', defend: 'Defend', scraft: 'S-Craft' };
   const DEF_COSTS = { attack: 10, craft: 12, castTime: 6, afterCast: 8, item: 8, move: 6, defend: 8, scraft: 16 };
-  const DEF_SETTINGS = { show: 12, rate: 30, numbers: false, step: 3, mode: 'rate', pct: 10, autoAct: false };
+  const DEF_SETTINGS = { show: 12, rate: 30, numbers: false, step: 3, mode: 'rate', pct: 10 };
   /* CP rules (see the rulebook): CP caps at 200. An S-Craft needs 100 and spends 100; at 200 it can be
      empowered and spends all 200. A character needs a regular turn between S-Crafts. */
   const CP_CAP = 200, S_MIN = 100;
@@ -664,13 +663,13 @@ td .stlist { margin-top: 4px; }
     heavyp: { n: 'Heavy, plated', base: 18, cap: 0, tier: 3, str: 15, stealth: 1 }
   };
   const DEF_SHEET = { v: 2, lvl: 1, str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10, frame: 'Balanced', hd: 8, fspd: 0,
-    hpAdj: 0, epBase: 0, armor: 'none', acAdj: 0, mv: 6, orb: null, crafts: [], sc: { n: '', x: '' } };
+    hpAdj: 0, epBase: 0, armor: 'none', mv: 6, orb: null, crafts: [], sc: { n: '', x: '' } };
   /* Every editable sheet field: [min, max] for numbers, 'text' (40 characters), or a list of allowed values. */
   const SHEET_FIELDS = { lvl: [1, 20], str: [1, 30], dex: [1, 30], con: [1, 30], int: [1, 30], wis: [1, 30], cha: [1, 30],
     frame: 'text', hd: ['6', '8', '10', '12'], fspd: [-1, 1], hpAdj: [-999, 999], epBase: [0, 9999],
-    armor: Object.keys(ARMOR), acAdj: [-10, 20], mv: [0, 30] };
+    armor: Object.keys(ARMOR), mv: [0, 30] };
   const SHEET_LABEL = { lvl: 'Level', frame: 'Frame', hd: 'Hit die', fspd: 'Frame speed', hpAdj: 'Bonus HP', epBase: 'Max EP',
-    armor: 'Armor', acAdj: 'Other AC', mv: 'Movement' };
+    armor: 'Armor', mv: 'Movement' };
   const MAX_CRAFTS = 12;
   function normSheet(sh, u) {
     const old = sh && !sh.v; // a sheet from before frames, armor and crafts
@@ -685,9 +684,8 @@ td .stlist { margin-top: 4px; }
       // Keep the max HP and AC that were typed in before these were worked out: the difference becomes a bonus.
       if (!FRAMES[sh.frame]) sh.frame = sh.frame && sh.frame !== 'Custom' ? sh.frame : 'Custom';
       if (sh.hpBase > 0) sh.hpAdj = Math.max(-999, Math.min(999, sh.hpBase - baseHP(sh)));
-      if (typeof sh.acBase === 'number') sh.acAdj = Math.max(-10, Math.min(20, sh.acBase - (10 + abMod(sh.dex))));
     }
-    delete sh.hpBase; delete sh.acBase; sh.v = 2;
+    delete sh.hpBase; delete sh.acBase; delete sh.acAdj; sh.v = 2;
     sh.orb = normOrb(sh.orb);
     sh.crafts = (Array.isArray(sh.crafts) ? sh.crafts : []).slice(0, MAX_CRAFTS).map(cleanCraft);
     sh.sc = { n: String((sh.sc && sh.sc.n) || '').slice(0, 40), x: String((sh.sc && sh.sc.x) || '').slice(0, 120) };
@@ -719,6 +717,8 @@ td .stlist { margin-top: 4px; }
   const ELEM = ['earth', 'water', 'fire', 'wind', 'time', 'space', 'mirage'];
   const ELEM_LABEL = { earth: 'Earth', water: 'Water', fire: 'Fire', wind: 'Wind', time: 'Time', space: 'Space', mirage: 'Mirage' };
   const CENTER_EP = 90, SLOT_EP = [40, 55, 80, 115, 165, 220];
+  const EPCUT_PCT = 5;  // EP Cut 1: arts' EP cost −5% (Zero; EP Cut 2 is −10%)
+  const CAST_PCT = 25;  // Cast: time to cast arts is cut by 25% (Zero)
   /* Ways to split the 6 line slots into lines. */
   const LAYOUTS = ['6', '5+1', '4+2', '4+1+1', '3+3', '3+2+1', '3+1+1+1', '2+2+2', '2+2+1+1', '2+1+1+1+1', '1+1+1+1+1+1'];
   /* Tier 1 quartz. fx: ac, hp, ep, mv, spd, watk (weapon attack), wdmg (weapon damage), adm (art damage),
@@ -734,8 +734,9 @@ td .stlist { margin-top: 4px; }
     move1: { n: 'Move 1', el: 'wind', b: '+1 square movement', fx: { mv: 1 } },
     action1: { n: 'Action 1', el: 'time', b: '+1 speed (one per orbment)', fx: { spd: 1 } },
     faint1: { n: 'Faint 1', el: 'time', b: 'Weapon hits Faint on d20 20', fx: { onHit: 'Faint' } },
+    cast: { n: 'Cast', el: 'time', v: 3, b: `Arts cast ${CAST_PCT}% faster (one per orbment)`, fx: { castcut: 1 } },
     hit1: { n: 'Hit 1', el: 'space', b: '+1 to weapon attack rolls', fx: { watk: 1 } },
-    epcut1: { n: 'EP Cut 1', el: 'space', b: 'Arts cost 5% less EP (rounded down)', fx: { epcut: 1 } },
+    epcut1: { n: 'EP Cut 1', el: 'space', b: `Arts cost ${EPCUT_PCT}% less EP (rounded down)`, fx: { epcut: 1 } },
     mind1: { n: 'Mind 1', el: 'mirage', b: '+1 to art damage rolls', fx: { adm: 1 } },
     ep1: { n: 'EP 1', el: 'mirage', b: '+20 max EP', fx: { ep: 20 } },
     shield1: { n: 'Shield 1', el: 'water', b: '+1 to saving throws against arts', fx: { asave: 1 } }
@@ -804,7 +805,12 @@ td .stlist { margin-top: 4px; }
   /* An art's EP cost for this caster: EP Cut quartz take 5% off each, rounded down. */
   function epCost(u, a) {
     const cut = tracked(u) && u.sh ? orbFx(u.sh.orb).epcut : 0;
-    return cut ? Math.max(1, Math.floor(a.ep * (1 - 0.05 * cut))) : a.ep;
+    return cut ? Math.max(1, Math.floor(a.ep * (1 - EPCUT_PCT / 100 * cut))) : a.ep;
+  }
+  /* An art's cast time for this caster: a Cast quartz cuts it by 25%. */
+  function castTime(u, a) {
+    const cut = tracked(u) && u.sh ? orbFx(u.sh.orb).castcut : 0;
+    return cut ? r1(a.c * (1 - CAST_PCT / 100)) : a.c;
   }
   const meets = (t, r) => Object.keys(r).every(e => (t[e] || 0) >= r[e]);
   const missing = (t, r) => Object.keys(r).reduce((n, e) => n + Math.max(0, r[e] - (t[e] || 0)), 0);
@@ -823,13 +829,14 @@ td .stlist { margin-top: 4px; }
     return ep;
   }
   function orbFx(o) {
-    const fx = { ac: 0, hp: 0, ep: 0, mv: 0, spd: 0, watk: 0, wdmg: 0, adm: 0, dexSave: 0, asave: 0, epcut: 0, onHit: [] };
+    const fx = { ac: 0, hp: 0, ep: 0, mv: 0, spd: 0, watk: 0, wdmg: 0, adm: 0, dexSave: 0, asave: 0, epcut: 0, castcut: 0, onHit: [] };
     if (!o) return fx;
     placed(o).forEach(qi => Object.keys(qi.fx || {}).forEach(k => {
       if (k === 'onHit') { if (!fx.onHit.includes(qi.fx.onHit)) fx.onHit.push(qi.fx.onHit); }
       else fx[k] += qi.fx[k];
     }));
     fx.spd = Math.min(1, fx.spd); // Action quartz: one per orbment
+    fx.castcut = Math.min(1, fx.castcut); // Cast: one per orbment
     return fx;
   }
 
@@ -898,7 +905,7 @@ td .stlist { margin-top: 4px; }
       speed: (fr ? fr.spd : sh.fspd) + fx.spd + sf.spd, sf,
       hpMax: Math.max(1, hpCalc + sh.hpAdj + fx.hp),
       epMax: sh.orb ? orbEP(sh.orb) + fx.ep : sh.epBase,
-      ac: arm.base + dexAC + fx.ac + sf.ac + sh.acAdj,
+      ac: arm.base + dexAC + fx.ac + sf.ac,
       mv: Math.max(0, sh.mv + fx.mv + sf.mv - (strShort ? 2 : 0))
     };
   }
@@ -928,7 +935,7 @@ td .stlist { margin-top: 4px; }
     if (hpEmpty && !u.ko) u.hp = u.hpMax;
     else if (u.hpMax > hpWas && !u.ko) u.hp += u.hpMax - hpWas; // gaining max HP (level up, CON) adds it to current HP too
     const label = ABIL_LABEL[k] || SHEET_LABEL[k];
-    const show = x => k === 'fspd' || k === 'hpAdj' || k === 'acAdj' ? fmtMod(x) : k === 'armor' ? ARMOR[x].n : k === 'hd' ? 'd' + x : (x === '' ? '—' : x);
+    const show = x => k === 'fspd' || k === 'hpAdj' ? fmtMod(x) : k === 'armor' ? ARMOR[x].n : k === 'hd' ? 'd' + x : (x === '' ? '—' : x);
     addLog(`${u.name}'s sheet: ${label} ${show(old)} → ${show(nv)}`, null, null, true);
     return true;
   }
@@ -1130,7 +1137,7 @@ td .stlist { margin-top: 4px; }
       if (JSON.stringify(q) === JSON.stringify(slot.q)) return false;
       const qi = qInfo(q);
       if (qi && slot.l && qi.el !== slot.l) return false; // element-locked slot
-      if (qi && qi.k === 'action1' && placed(o).some(x => x.k === 'action1') && !(slot.q && slot.q.k === 'action1')) return false;
+      if (qi && (qi.k === 'action1' || qi.k === 'cast') && placed(o).some(x => x.k === qi.k) && !(slot.q && slot.q.k === qi.k)) return false;
       const old = qInfo(slot.q);
       slot.q = q; syncSheet(u);
       lg(qi ? `${qi.n} (${ELEM_LABEL[qi.el]} ${qi.v}) into the ${where}` : `${old ? old.n : 'quartz'} removed from the ${where}`);
@@ -1508,7 +1515,7 @@ td .stlist { margin-top: 4px; }
         ${p.kind === 'arts' ? `<p class="artinfo" id="f-artinfo">${artInfo(p, pv.u)}</p>` : ''}
         ${p.kind === 'craft' && tracked(pv.u) && (pv.u.sh.crafts.find(c => c.n === p.name) || {}).x ? `<p class="artinfo">${esc(pv.u.sh.crafts.find(c => c.n === p.name).x)}</p>` : ''}
         ${p.kind === 'scraft' && tracked(pv.u) && pv.u.sh.sc.x ? `<p class="artinfo">${esc(pv.u.sh.sc.x)}</p>` : ''}
-        ${p.ph ? `<p class="artinfo"><span class="tag linked">FROM PHONE</span> ${esc(pv.u.name)} picked this on their phone.</p>` : ''}
+        ${p.ph ? `<p class="artinfo"><span class="tag linked">FROM PHONE</span> ${esc(pv.u.name)} picked this and confirms it on their phone. You can still confirm or cancel here.</p>` : ''}
         <div class="landing" id="landing">${landingHtml(pv)}</div>
         <p class="errtext" id="f-cost" ${costCheck(p, pv.u).ok ? 'hidden' : ''}>${esc(costCheck(p, pv.u).msg || '')}</p>
         <div class="tools">
@@ -1593,7 +1600,7 @@ td .stlist { margin-top: 4px; }
     const set = (id, v) => { const el = document.getElementById(id); if (el && document.activeElement !== el) { if (el.type === 'checkbox') el.checked = !!v; else el.value = v; } };
     set('set-show', st.show); document.getElementById('showVal').textContent = st.show;
     set('set-rate', st.rate); document.getElementById('rateVal').textContent = st.rate + '%';
-    set('set-numbers', st.numbers); set('set-step', st.step); set('set-autoact', st.autoAct);
+    set('set-numbers', st.numbers); set('set-step', st.step);
     set('set-mode', st.mode); set('set-pct', st.pct);
     document.getElementById('pctWrap').hidden = st.mode === 'flat';
     const base = S.costs.attack;
@@ -1707,7 +1714,6 @@ td .stlist { margin-top: 4px; }
       <div class="abil">${abil}</div>
       <div class="shrow">
         <label class="grow">Armor ${sel('armor', Object.keys(ARMOR).map(k => [k, `${ARMOR[k].n} · ${ARMOR[k].base}${ARMOR[k].cap === 0 ? '' : ARMOR[k].cap ? ' + DEX (max 2)' : ' + DEX'}`]))}</label>
-        <label title="Shields, accessories, perks">Other AC ${num('acAdj')}</label>
         <label title="Rolled HP, feats, perks, accessories like a Vigor ring">Bonus HP ${num('hpAdj')}</label>
         ${sh.orb ? '' : `<label>Max EP ${num('epBase')}</label>`}
         <label>Movement ${num('mv')}</label>
@@ -1730,7 +1736,7 @@ td .stlist { margin-top: 4px; }
     const hpWhy = `5e: d${d.hd} max + CON at level 1 (${Math.max(1, d.hd + d.mods.con)}), then ${perLvl} a level (d${d.hd} average ${d.hd / 2 + 1} + CON)` +
       (sh.hpAdj ? `, ${fmtMod(sh.hpAdj)} bonus` : '') + (d.fx.hp ? `, +${d.fx.hp} quartz` : '');
     const acWhy = `${d.arm.n}: ${d.arm.base}` + (d.arm.cap === 0 ? '' : ` + DEX ${fmtMod(d.dexAC)}${d.arm.cap ? ' (max 2)' : ''}`) +
-      (d.fx.ac ? ` + ${d.fx.ac} quartz` : '') + (d.sf.ac ? ` ${fmtMod(d.sf.ac)} statuses` : '') + (sh.acAdj ? ` ${fmtMod(sh.acAdj)} other` : '');
+      (d.fx.ac ? ` + ${d.fx.ac} quartz` : '') + (d.sf.ac ? ` ${fmtMod(d.sf.ac)} statuses` : '');
     return [
       c('Max HP', d.hpMax, hpWhy),
       c('AC', d.ac, acWhy),
@@ -1749,7 +1755,8 @@ td .stlist { margin-top: 4px; }
       d.fx.watk ? c('Weapon attack', `+${d.fx.watk} (quartz)`) : '',
       d.fx.wdmg ? c('Weapon damage', `+${d.fx.wdmg} (quartz)`) : '',
       d.fx.adm ? c('Art damage', `+${d.fx.adm} (quartz)`) : '',
-      d.fx.epcut ? c('Art EP cost', `−${d.fx.epcut * 5}% (quartz)`) : '',
+      d.fx.epcut ? c('Art EP cost', `−${d.fx.epcut * EPCUT_PCT}% (quartz)`) : '',
+      d.fx.castcut ? c('Art cast time', `−${CAST_PCT}% (Cast quartz)`) : '',
       d.fx.dexSave ? c('DEX saves', `+${d.fx.dexSave} (quartz)`) : '',
       d.fx.asave ? c('Saves vs arts', `+${d.fx.asave} (quartz)`) : '',
       d.fx.onHit.length ? c('Weapon hit on 20', d.fx.onHit.join(', ')) : ''
@@ -1792,10 +1799,10 @@ td .stlist { margin-top: 4px; }
         <label>Element lock <select data-oop="lock">${['', ...ELEM].map(e => `<option value="${e}" ${s.l === (e || null) ? 'selected' : ''}>${e ? ELEM_LABEL[e] + ' only' : 'Any element'}</option>`).join('')}</select></label>
       </div>`;
     if (!s.o) return h + `<p class="muted">${gm ? 'Unlock this slot to put quartz in it.' : 'This slot is locked. The GM unlocks slots with sepith.'}</p></div>`;
-    const hasAction = placed(o).some(x => x.k === 'action1') && !(s.q && s.q.k === 'action1');
+    const taken = k => (k === 'action1' || k === 'cast') && placed(o).some(x => x.k === k) && !(s.q && s.q.k === k);
     const opts = Object.keys(STARTERS).filter(k => !s.l || STARTERS[k].el === s.l).map(k => {
-      const q = STARTERS[k], off = k === 'action1' && hasAction;
-      return `<option value="${k}" ${s.q && s.q.k === k ? 'selected' : ''} ${off ? 'disabled' : ''}>${q.n} · ${ELEM_LABEL[q.el]} 1 · ${q.b}${off ? ' (one per orbment)' : ''}</option>`;
+      const q = STARTERS[k], off = taken(k);
+      return `<option value="${k}" ${s.q && s.q.k === k ? 'selected' : ''} ${off ? 'disabled' : ''}>${q.n} · ${ELEM_LABEL[q.el]} ${q.v || 1} · ${q.b}${off ? ' (one per orbment)' : ''}</option>`;
     }).join('');
     const cq = s.q && !s.q.k ? s.q : null;
     h += `<label>Quartz <select data-oop="pick"><option value="">Empty</option>${opts}<option value="custom" ${cq ? 'selected' : ''}>Custom quartz…</option></select></label>`;
@@ -1811,9 +1818,9 @@ td .stlist { margin-top: 4px; }
   function artRow(a, d, u) {
     const roll = a.ro === 'Attack' ? `Attack ${fmtSigned(d.artAtk)}` : /save/.test(a.ro) ? `${a.ro} DC ${d.artDC}` : '';
     const fx = a.fx.replace(/\+ mod/g, (d.wis < 0 ? '− ' : '+ ') + Math.abs(d.wis));
-    const ep = u ? epCost(u, a) : a.ep;
+    const ep = u ? epCost(u, a) : a.ep, ct = u ? castTime(u, a) : a.c;
     return `<li><div class="an">${elDot(a.g)}<b>${esc(a.n)}</b><span class="num">${ep} EP</span></div>
-      <div class="ad">${esc(a.ar)}${roll ? ' · ' + roll : ''} · cast ${a.c}, rec. ${a.a}</div><div class="ad">${esc(fx)}</div></li>`;
+      <div class="ad">${esc(a.ar)}${roll ? ' · ' + roll : ''} · cast ${ct}, rec. ${a.a}</div><div class="ad">${esc(fx)}</div></li>`;
   }
   function orbHtml(u, pre, gm) {
     const o = u.sh.orb;
@@ -1916,7 +1923,7 @@ td .stlist { margin-top: 4px; }
     else if (r.kind === 'arts') {
       const a = ARTS_BY[String(r.art || '').toLowerCase()];
       if (!a || (u.sh.orb && !artsFor(u.sh.orb).can.includes(a))) return false;
-      p = { kind: 'arts', name: a.n, art: a.n, base: a.c, after: a.a, ep: epCost(u, a) };
+      p = { kind: 'arts', name: a.n, art: a.n, base: castTime(u, a), after: a.a, ep: epCost(u, a) };
     } else if (r.kind === 'craft') {
       const c = u.sh.crafts[Math.round(Number(r.i))]; if (!c) return false;
       p = { kind: 'craft', name: c.n, base: c.d, cp: c.cp };
@@ -1948,9 +1955,14 @@ td .stlist { margin-top: 4px; }
     else if (r.type === 'orb') changed = applyOrb(u, r, false);
     else if (r.type === 'craft') changed = applyCraft(u, r);
     else if (r.type === 'act') {
+      // Players confirm their own picks; the GM's tracker checks it's still their pick and they can pay for it.
+      if (r.kind === 'confirm') {
+        undoStack.pop();
+        const cur = queue()[0];
+        if (S.pending && S.pending.ph && S.pending.unitId === u.id && cur && cur.unitId === u.id && costCheck(S.pending, u).ok) return confirmPending();
+        return render();
+      }
       changed = phoneAct(u, r);
-      // Optional: players' picks go straight through when they can pay for them.
-      if (changed && S.settings.autoAct && S.pending && S.pending.ph && costCheck(S.pending, u).ok) { undoStack.pop(); return confirmPending(); }
     }
     if (!changed) { undoStack.pop(); return render(); }
     keepPendingValid();
@@ -2047,17 +2059,21 @@ td .stlist { margin-top: 4px; }
     if (!cur || cur.unitId !== me.id || me.ko) { amPick = null; return ''; }
     const sp = spd(me), dl = k => '+' + fmtT(delay(S.costs[ACTIONS[k].cost], sp));
     if (cur.kind === 'cast') {
-      const p = S.pending && S.pending.unitId === me.id && S.pending.kind === 'resolve';
+      const p = S.pending && S.pending.unitId === me.id && S.pending.kind === 'resolve' && S.pending.ph;
       return `<div class="amact"><div class="big">Your ${esc(cur.art)} goes off</div>
-        ${p ? '<p class="muted">Sent. Waiting for the GM to confirm.</p>' : `<div class="qbtns"><button class="btn primary" data-am="act" data-k="resolve">Resolve ${esc(cur.art)}</button></div>`}</div>`;
+        ${p ? `<div class="qbtns"><button class="btn primary" data-am="act" data-k="confirm">Confirm: ${esc(cur.art)} goes off</button><button class="btn ghost" data-am="act" data-k="cancel">Cancel</button></div>`
+          : `<div class="qbtns"><button class="btn primary" data-am="act" data-k="resolve">Resolve ${esc(cur.art)}</button></div>`}</div>`;
     }
     const p = S.pending && S.pending.unitId === me.id && S.pending.ph ? S.pending : null;
     let h = `<div class="amact"><div class="big">Your turn</div>`;
     if (p) {
       const what = p.kind === 'arts' || p.kind === 'craft' || p.kind === 'scraft' || (p.kind === 'item' && p.name) ? `${ACTIONS[p.kind].label}: ${p.name || 'S-Craft'}` : ACTIONS[p.kind].label;
       const pv = preview();
-      h += `<div class="sent"><span><b>${esc(what)}</b>${pv ? ` · lands +${fmtT(pv.d)}` : ''}</span><span class="muted">Sent. Waiting for the GM to confirm.</span>
-        <button class="btn small ghost" data-am="act" data-k="cancel">Cancel</button></div>`;
+      const cc = costCheck(p, me);
+      h += `<div class="sent"><span><b>${esc(what)}</b>${pv ? ` · lands +${fmtT(pv.d)}${pv.bonus !== 'none' ? ' on ' + BONUS[pv.bonus].label : ''}` : ''}</span>
+        ${cc.ok ? '<span class="muted">Check the preview on the timeline, then confirm.</span>' : `<span class="errtext">${esc(cc.msg)}</span>`}
+        <div class="qbtns"><button class="btn primary" data-am="act" data-k="confirm" ${cc.ok ? '' : 'disabled'}>Confirm</button>
+        <button class="btn ghost" data-am="act" data-k="cancel">Cancel</button></div></div>`;
     }
     const stop = stopped(me);
     if (stop.length) h += `<div class="stbanner"><span><b>${esc(stop.map(x => STATUS[x.k].n).join(', '))}:</b> ${stop.some(x => STATUS[x.k].skip) ? 'this turn is skipped.' : "you can't act."}</span><button class="btn primary" data-am="act" data-k="skip">Skip turn</button></div>`;
@@ -2073,7 +2089,7 @@ td .stlist { margin-top: 4px; }
         const roll = a.ro === 'Attack' ? `Attack ${fmtSigned(d.artAtk)}` : /save/.test(a.ro) ? `${a.ro} DC ${d.artDC}` : '';
         return `<button class="pickrow" data-am="act" data-k="arts" data-art="${esc(a.n)}" ${poor ? 'disabled' : ''}>
           <span class="an">${elDot(a.g)}<b>${esc(a.n)}</b><span class="num">${ep} EP${poor ? ' · not enough' : ''}</span></span>
-          <span class="ad">${esc(a.ar)}${roll ? ' · ' + roll : ''} · cast +${fmtT(delay(a.c, sp))}, then +${fmtT(delay(a.a, sp))}</span>
+          <span class="ad">${esc(a.ar)}${roll ? ' · ' + roll : ''} · cast +${fmtT(delay(castTime(me, a), sp))}, then +${fmtT(delay(a.a, sp))}</span>
           <span class="ad">${esc(a.fx.replace(/\+ mod/g, (d.wis < 0 ? '− ' : '+ ') + Math.abs(d.wis)))}</span></button>`;
       }).join('') : '<p class="muted">No arts on your orbment yet.</p>') + '</div>';
     }
@@ -2591,7 +2607,7 @@ td .stlist { margin-top: 4px; }
         if (a.dataset.art) r.art = a.dataset.art;
         if (a.dataset.i !== undefined) r.i = Number(a.dataset.i);
         if (a.dataset.emp !== undefined) r.emp = a.dataset.emp === '1';
-        if (r.kind !== 'cancel') amPick = null;
+        if (r.kind !== 'cancel' && r.kind !== 'confirm') amPick = null;
         return amSend(r, a);
       }
       if (k === 'res') {
@@ -2807,9 +2823,9 @@ td .stlist { margin-top: 4px; }
         const a = S.pending.kind === 'arts' ? ARTS_BY[t.value.trim().toLowerCase()] : null;
         if (a && S.pending.art !== a.n) {
           const u = U(S.pending.unitId);
-          S.pending.art = a.n; S.pending.base = a.c; S.pending.after = a.a;
+          S.pending.art = a.n; S.pending.base = castTime(u, a); S.pending.after = a.a;
           if (tracked(u)) S.pending.ep = epCost(u, a);
-          [['f-base', a.c], ['f-after', a.a], ['f-ep', S.pending.ep ?? a.ep]].forEach(([id, v]) => { const el = $(id); if (el) el.value = v; });
+          [['f-base', S.pending.base], ['f-after', a.a], ['f-ep', S.pending.ep ?? a.ep]].forEach(([id, v]) => { const el = $(id); if (el) el.value = v; });
         }
         const info = $('f-artinfo'); if (info) info.innerHTML = artInfo(S.pending, U(S.pending.unitId));
       }
@@ -2920,7 +2936,6 @@ td .stlist { margin-top: 4px; }
     }
     const k = t.dataset.set;
     if (k === 'numbers') { st.numbers = t.checked; return commit(); }
-    if (k === 'autoAct') { st.autoAct = t.checked; return commit(); }
     if (k === 'step') { st.step = Math.max(1, Number(t.value) || 1); return save(); }
     if (k === 'mode') { snapshot(); st.mode = t.value; return commit(); }
     if (k === 'pct') { snapshot(); st.pct = Number(t.value) || 10; return commit(); }
