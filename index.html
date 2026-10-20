@@ -321,6 +321,22 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
 .dchip.warn { border-color: color-mix(in srgb, var(--cast) 60%, var(--line)); }
 .dchip.warn b { color: #f6a06a; }
 .crafts { display: flex; flex-direction: column; gap: 8px; }
+/* Skills & saves */
+.saves { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.sv { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+.sv .abk { font-family: var(--font-display); font-weight: 700; letter-spacing: .1em; font-size: .74rem; }
+.sv b { font-family: var(--font-mono); font-weight: 500; font-size: 1.15rem; }
+.sv .svp { font-size: .72rem; color: var(--muted); }
+.sv.pro { border-color: color-mix(in srgb, var(--accent, #7aa2f7) 70%, var(--line)); }
+.sv.pro .svp { color: var(--fg); }
+.skills { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; }
+.skrow { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; padding: 3px 0; border-bottom: 1px solid var(--line); }
+.skrow .skn i { font-style: normal; font-size: .72rem; color: var(--muted); letter-spacing: .06em; margin-left: 4px; }
+.skrow b { font-family: var(--font-mono); font-weight: 500; min-width: 2.4em; text-align: right; }
+.skrow select { font-size: .8rem; padding: 2px 4px; }
+.skrow.pro .skn { font-weight: 600; }
+.skrow .dis, .sv .dis { font-size: .7rem; color: #f6a06a; }
+@media (max-width: 560px) { .saves { grid-template-columns: repeat(3, minmax(0, 1fr)); } .skills { grid-template-columns: 1fr; } }
 .craft { display: grid; grid-template-columns: minmax(8em, 1.2fr) auto auto minmax(10em, 2fr) auto; gap: 6px 8px; align-items: end; }
 .craft.sc { grid-template-columns: minmax(8em, 1fr) minmax(10em, 2fr); }
 .craft label { flex-direction: row; align-items: center; gap: 4px; font-size: .78rem; }
@@ -494,6 +510,7 @@ td .stlist { margin-top: 4px; }
   <section class="panel atb-only gm" id="sheetPanel" aria-label="Character sheet" hidden>
     <div class="panel-head" id="sheetHead"></div>
     <div id="sheetBody"></div>
+    <div id="skillBody"></div>
     <div id="orbBody"></div>
   </section>
 
@@ -689,18 +706,19 @@ td .stlist { margin-top: 4px; }
   const ABIL = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
   // LCK (luck) replaces CHA; it's still stored as "cha" so saved sheets keep their scores.
   const ABIL_LABEL = { str: 'STR', dex: 'DEX', con: 'CON', int: 'INT', wis: 'WIS', cha: 'LCK' };
-  /* Frames (Core Rules › Frames): hit die, speed, armor proficiency, and the orbment shape their EP tier maps to. */
+  /* Frames (Core Rules › Frames): hit die, speed, armor proficiency, two saving throw proficiencies (one common: DEX, CON
+     or WIS; one rarer: STR, INT or LCK), and the orbment shape their EP tier maps to. */
   const FRAMES = {
-    Bulwark: { hd: 12, spd: -1, ep: 'Low', arm: 3, lay: '3+1+1+1', feel: 'Tank' },
-    Vanguard: { hd: 10, spd: 0, ep: 'Low–mid', arm: 3, lay: '3+2+1', feel: 'Front-line fighter' },
-    Spellblade: { hd: 10, spd: -1, ep: 'Mid', arm: 3, lay: '3+3', feel: 'Armored hybrid' },
-    Duelist: { hd: 8, spd: 1, ep: 'Low', arm: 2, lay: '3+1+1+1', feel: 'Fast melee' },
-    Balanced: { hd: 8, spd: 0, ep: 'Mid', arm: 2, lay: '3+3', feel: 'All-rounder' },
-    Marksman: { hd: 8, spd: 0, ep: 'Low–mid', arm: 2, lay: '3+2+1', feel: 'Ranged' },
-    Tactician: { hd: 8, spd: 0, ep: 'Mid–high', arm: 2, lay: '4+2', feel: 'Support' },
-    Phantom: { hd: 6, spd: 1, ep: 'Mid', arm: 1, lay: '3+3', feel: 'Scout / rogue' },
-    Adept: { hd: 6, spd: 0, ep: 'High', arm: 1, lay: '5+1', feel: 'Arts caster' },
-    Sage: { hd: 6, spd: -1, ep: 'Very high', arm: 1, lay: '6', feel: 'Heavy caster' }
+    Bulwark: { hd: 12, spd: -1, ep: 'Low', arm: 3, lay: '3+1+1+1', saves: ['con', 'str'], feel: 'Tank' },
+    Vanguard: { hd: 10, spd: 0, ep: 'Low–mid', arm: 3, lay: '3+2+1', saves: ['wis', 'str'], feel: 'Front-line fighter' },
+    Spellblade: { hd: 10, spd: -1, ep: 'Mid', arm: 3, lay: '3+3', saves: ['con', 'int'], feel: 'Armored hybrid' },
+    Duelist: { hd: 8, spd: 1, ep: 'Low', arm: 2, lay: '3+1+1+1', saves: ['dex', 'str'], feel: 'Fast melee' },
+    Balanced: { hd: 8, spd: 0, ep: 'Mid', arm: 2, lay: '3+3', saves: ['con', 'cha'], feel: 'All-rounder' },
+    Marksman: { hd: 8, spd: 0, ep: 'Low–mid', arm: 2, lay: '3+2+1', saves: ['dex', 'int'], feel: 'Ranged' },
+    Tactician: { hd: 8, spd: 0, ep: 'Mid–high', arm: 2, lay: '4+2', saves: ['wis', 'int'], feel: 'Support' },
+    Phantom: { hd: 6, spd: 1, ep: 'Mid', arm: 1, lay: '3+3', saves: ['dex', 'cha'], feel: 'Scout / rogue' },
+    Adept: { hd: 6, spd: 0, ep: 'High', arm: 1, lay: '5+1', saves: ['wis', 'cha'], feel: 'Arts caster' },
+    Sage: { hd: 6, spd: -1, ep: 'Very high', arm: 1, lay: '6', saves: ['wis', 'int'], feel: 'Heavy caster' }
   };
   const ARM_TIER = ['none', 'Light', 'Medium', 'Heavy'];
   /* Armor (Armor & Accessories tab). cap = most DEX that counts; str = STR needed to avoid −2 movement. */
@@ -740,18 +758,34 @@ td .stlist { margin-top: 4px; }
     'Endurance', 'Equilibrium', 'Ferocity', 'Focus', 'Foresight', 'Fortune', 'Fury', 'Gluttony', 'Guardian', 'Harmony', 'Honor',
     'Judgment', 'Mercy', 'Perseverance', 'Power', 'Precision', 'Reaving', 'Recklessness', 'Retaliation', 'Sacrifice', 'Savagery',
     'Serenity', 'Speed', 'Tenacity', 'Tyranny', 'Unity', 'Valor', 'Zeal'];
+  /* 5e skills. LCK replaces CHA (Persuasion, Deception, Performance); Intimidation moves to STR. */
+  const SKILLS = [['acrobatics', 'Acrobatics', 'dex'], ['animal', 'Animal Handling', 'wis'], ['arcana', 'Arcana', 'int'],
+    ['athletics', 'Athletics', 'str'], ['deception', 'Deception', 'cha'], ['history', 'History', 'int'], ['insight', 'Insight', 'wis'],
+    ['intimidation', 'Intimidation', 'str'], ['investigation', 'Investigation', 'int'], ['medicine', 'Medicine', 'wis'],
+    ['nature', 'Nature', 'int'], ['perception', 'Perception', 'wis'], ['performance', 'Performance', 'cha'],
+    ['persuasion', 'Persuasion', 'cha'], ['religion', 'Religion', 'int'], ['sleight', 'Sleight of Hand', 'dex'],
+    ['stealth', 'Stealth', 'dex'], ['survival', 'Survival', 'wis']];
+  const SKILL = Object.fromEntries(SKILLS.map(([k, n, a]) => [k, { n, a }]));
+  const SK_LEVEL = ['not proficient', 'proficient', 'expertise'];
+  const cleanSk = o => Object.fromEntries(Object.entries(o && typeof o === 'object' ? o : {})
+    .filter(([k, v]) => SKILL[k] && (v === 1 || v === 2)));
+  /* Character Creation Guide: 4 skills to start, plus one skill or tool proficiency every 3 levels. */
+  const skillGoal = lvl => 4 + Math.floor(lvl / 3);
   const DEF_SHEET = { v: 3, lvl: 1, str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10, frame: 'Balanced', hd: 8, fspd: 0,
     hpAdj: 0, epBase: 0, armor: 'none', mv: 6, orb: null, crafts: [], sc: { n: '', x: '' },
-    vhA: '', vhS: '', vdA: '', vdS: '', style: '', wpn: '', boots: 'std', acc1: 'none', acc2: 'none' };
+    vhA: '', vhS: '', vdA: '', vdS: '', style: '', wpn: '', boots: 'std', acc1: 'none', acc2: 'none',
+    sk: {}, sv1: '', sv2: '', badge: '', tools: '' };
   /* Every editable sheet field: [min, max] for numbers, 'text' (40 characters), or a list of allowed values. */
   const SHEET_FIELDS = { lvl: [1, 20], str: [1, 30], dex: [1, 30], con: [1, 30], int: [1, 30], wis: [1, 30], cha: [1, 30],
     frame: 'text', hd: ['6', '8', '10', '12'], fspd: [-1, 1], hpAdj: [-999, 999], epBase: [0, 9999],
     armor: Object.keys(ARMOR), mv: [0, 30],
     vhA: [''].concat(ARCANA), vhS: ['', 'str', 'dex', 'con', 'int', 'wis', 'cha'], vdA: [''].concat(ARCANA), vdS: ['', 'str', 'dex', 'con', 'int', 'wis', 'cha'],
-    style: [''].concat(STYLES), wpn: 'text', boots: Object.keys(BOOTS), acc1: Object.keys(ACCESSORIES), acc2: Object.keys(ACCESSORIES) };
+    style: [''].concat(STYLES), wpn: 'text', boots: Object.keys(BOOTS), acc1: Object.keys(ACCESSORIES), acc2: Object.keys(ACCESSORIES),
+    sv1: ['', ...ABIL], sv2: ['', ...ABIL], badge: ['', ...ABIL], tools: 'long' };
   const SHEET_LABEL = { lvl: 'Level', frame: 'Frame', hd: 'Hit die', fspd: 'Frame speed', hpAdj: 'Bonus HP', epBase: 'Max EP',
     armor: 'Armor', mv: 'Movement', vhA: 'History vantage', vhS: 'History +2', vdA: 'Destiny vantage', vdS: 'Destiny +1',
-    style: 'Fighting style', wpn: 'Weapon', boots: 'Boots', acc1: 'Accessory 1', acc2: 'Accessory 2' };
+    style: 'Fighting style', wpn: 'Weapon', boots: 'Boots', acc1: 'Accessory 1', acc2: 'Accessory 2',
+    sv1: 'Save proficiency', sv2: 'Save proficiency', badge: 'Silver badge save', tools: 'Tools & other proficiencies' };
   /* An ability score with Vantage bonuses: History +2, Destiny +1. */
   const score = (sh, a) => (Number(sh[a]) || 0) + (sh.vhS === a ? 2 : 0) + (sh.vdS === a ? 1 : 0);
   const gear = sh => [BOOTS[sh.boots] || BOOTS.std, ACCESSORIES[sh.acc1] || ACCESSORIES.none, ACCESSORIES[sh.acc2] || ACCESSORIES.none];
@@ -776,6 +810,7 @@ td .stlist { margin-top: 4px; }
     delete sh.hpBase; delete sh.acBase; delete sh.acAdj; sh.v = 3;
     sh.orb = normOrb(sh.orb);
     sh.crafts = (Array.isArray(sh.crafts) ? sh.crafts : []).slice(0, MAX_CRAFTS).map(cleanCraft);
+    sh.sk = cleanSk(sh.sk);
     sh.sc = { n: String((sh.sc && sh.sc.n) || '').slice(0, 40), x: String((sh.sc && sh.sc.x) || '').slice(0, 120) };
     return sh;
   }
@@ -783,6 +818,7 @@ td .stlist { margin-top: 4px; }
     const f = SHEET_FIELDS[k];
     if (!f) return null;
     if (f === 'text') return typeof v === 'string' ? v.trim().slice(0, 40) : '';
+    if (f === 'long') return typeof v === 'string' ? v.trim().slice(0, 120) : '';
     if (Array.isArray(f) && typeof f[0] === 'string') { const sv = String(v ?? ''); return f.includes(sv) ? (k === 'hd' ? Number(sv) : sv) : null; }
     const n = Math.round(Number(v));
     return isFinite(n) ? Math.max(f[0], Math.min(f[1], n)) : null;
@@ -989,7 +1025,26 @@ td .stlist { margin-top: 4px; }
     const strShort = !!(arm.str && tot.str < arm.str);           // heavy armor without the STR: −2 movement
     const notProf = !!(fr && arm.tier > fr.arm);
     const hpCalc = baseHP(sh);
+    const saveProf = fr ? fr.saves : [sh.sv1, sh.sv2].filter(Boolean);
+    const badge = (sh.acc1 === 'badge' || sh.acc2 === 'badge') ? sh.badge : '';
+    const saves = {}, skills = {};
+    ABIL.forEach(a => {
+      const p = saveProf.includes(a), bits = [];
+      let t = m[a] + (p ? prof : 0);
+      if (a === 'str' && sh.boots === 'sturdy') { t += 1; bits.push('+1 Sturdy boots'); }
+      if (a === 'dex' && fx.dexSave) { t += fx.dexSave; bits.push(`+${fx.dexSave} quartz`); }
+      if (badge === a) { t += 1; bits.push('+1 Silver badge'); }
+      saves[a] = { p, t, bits, dis: notProf && (a === 'str' || a === 'dex') };
+    });
+    const lens = [sh.acc1, sh.acc2].filter(x => x === 'lens').length * 2;
+    SKILLS.forEach(([k, , a]) => {
+      const lv = sh.sk[k] || 0, bits = [];
+      let t = m[a] + prof * lv;
+      if (k === 'perception' && lens) { t += lens; bits.push(`+${lens} Scout's lens`); }
+      skills[k] = { lv, t, bits, dis: (notProf && (a === 'str' || a === 'dex')) || (k === 'stealth' && !!arm.stealth) };
+    });
     return {
+      saves, saveProf, skills, craftDC: 8 + prof + Math.max(m.str, m.dex),
       mods: m, tot, prof, fx, fr, arm, dexAC, strShort, notProf, hpCalc,
       hd: hitDie(sh), fspd: fr ? fr.spd : sh.fspd,
       artAtk: prof + m.int, artDC: 8 + prof + m.int, wis: m.wis,
@@ -1015,6 +1070,7 @@ td .stlist { margin-top: 4px; }
   const critText = c => c >= 20 ? '20' : `${c}–20`;
   /* Apply one sheet change (from the GM, or a player's phone). Returns true if something changed. */
   function applySheet(u, k, v) {
+    if (k === 'sk') return applySkill(u, v);
     if (!tracked(u) || !u.sh || !SHEET_FIELDS[k]) return false;
     const nv = cleanSheet(k, v);
     if (nv === null || nv === u.sh[k]) return false;
@@ -1029,31 +1085,45 @@ td .stlist { margin-top: 4px; }
     else if (u.hpMax > hpWas && !u.ko) u.hp += u.hpMax - hpWas; // gaining max HP (level up, CON) adds it to current HP too
     const label = ABIL_LABEL[k] || SHEET_LABEL[k];
     const show = x => k === 'fspd' || k === 'hpAdj' ? fmtMod(x) : k === 'armor' ? ARMOR[x].n : k === 'hd' ? 'd' + x
+      : (k === 'sv1' || k === 'sv2' || k === 'badge') ? (ABIL_LABEL[x] || '—')
       : k === 'boots' ? BOOTS[x].n : (k === 'acc1' || k === 'acc2') ? ACCESSORIES[x].n : (k === 'vhS' || k === 'vdS') ? (ABIL_LABEL[x] || '—') : (x === '' ? '—' : x);
     addLog(`${u.name}'s sheet: ${label} ${show(old)} → ${show(nv)}`, null, null, true);
+    return true;
+  }
+  /* A skill proficiency change: "athletics:1" (proficient), ":2" (expertise) or ":0" (none). */
+  function applySkill(u, v) {
+    if (!tracked(u) || !u.sh) return false;
+    const [k, n] = String(v || '').split(':'), lv = Number(n);
+    if (!SKILL[k] || ![0, 1, 2].includes(lv)) return false;
+    const old = u.sh.sk[k] || 0;
+    if (old === lv) return false;
+    const sk = Object.assign({}, u.sh.sk);
+    if (lv) sk[k] = lv; else delete sk[k];
+    u.sh.sk = sk;
+    addLog(`${u.name}'s sheet: ${SKILL[k].n} ${SK_LEVEL[old]} → ${SK_LEVEL[lv]}`, null, null, true);
     return true;
   }
 
   function sample() {
     const units = [
       { id: 'u1', name: 'Estelle', side: 'ally', hp: 24, ep: 30, cp: 60,
-        sh: { v: 3, lvl: 3, str: 13, dex: 14, con: 13, int: 8, wis: 12, cha: 13, frame: 'Vanguard', armor: 'heavy', mv: 6, epBase: 40,
+        sh: { v: 3, lvl: 3, str: 13, dex: 14, con: 13, int: 8, wis: 12, cha: 13, sk: { athletics: 1, intimidation: 1, insight: 1, perception: 1, persuasion: 1 }, frame: 'Vanguard', armor: 'heavy', mv: 6, epBase: 40,
           vhA: 'Strength', vhS: 'str', vdA: 'The Sun', vdS: 'con', style: 'Bravery', wpn: 'Staff (5e: quarterstaff)', boots: 'sturdy', acc1: 'medal', acc2: 'none',
           crafts: [{ n: 'Wheel Smash', cp: 20, d: 30, x: 'Melee, 1d10 + STR; circle r1 around the target' }, { n: 'Swallow Strike', cp: 30, d: 25, x: 'Dash 4 squares and strike; Faint on d20 17+' }],
           sc: { n: 'Phoenix Strike', x: 'Line 6, 6d10 + STR' } } },
       { id: 'u2', name: 'Goblin', side: 'enemy', speed: -1 },
       { id: 'u3', name: 'Joshua', side: 'ally', hp: 21, ep: 28, cp: 120,
-        sh: { v: 3, lvl: 3, str: 12, dex: 17, con: 12, int: 10, wis: 13, cha: 14, frame: 'Duelist', armor: 'light', mv: 7, epBase: 36,
+        sh: { v: 3, lvl: 3, str: 12, dex: 17, con: 12, int: 10, wis: 13, cha: 14, sk: { stealth: 2, acrobatics: 1, perception: 1, sleight: 1, deception: 1 }, frame: 'Duelist', armor: 'light', mv: 7, epBase: 36,
           crafts: [{ n: 'Double Edge', cp: 20, d: 25, x: 'Two strikes, 1d6 + DEX each' }], sc: { n: 'Black Fang', x: 'Circle r2, 5d8 + DEX' } } },
       { id: 'u4', name: 'Kloe', side: 'ally', hp: 15, ep: 250, cp: 25,
-        sh: { v: 3, lvl: 3, str: 8, dex: 13, con: 12, int: 16, wis: 15, cha: 12, frame: 'Adept', armor: 'light', mv: 6, epBase: 80,
+        sh: { v: 3, lvl: 3, str: 8, dex: 13, con: 12, int: 16, wis: 15, cha: 12, sk: { history: 1, insight: 1, persuasion: 1, investigation: 1, medicine: 1 }, frame: 'Adept', armor: 'light', mv: 6, epBase: 80,
           crafts: [{ n: 'Sapphire Slash', cp: 20, d: 30, x: 'Melee, 1d8 + DEX; Freeze on d20 19+' }, { n: 'Holy Song', cp: 40, d: 35, x: 'Allies in circle r3 heal 2d8 + WIS' }],
           sc: { n: 'Ray of Hope', x: 'All allies heal fully' },
           orb: { lay: '4+2', man: false, c: { o: true, l: null, q: { k: 'hp1' } },
             L: [[{ o: true, l: 'water', q: { k: 'freeze1' } }, { o: true, l: null, q: { k: 'mind1' } }, { o: true, l: null, q: { k: 'epcut1' } }, { o: false, l: null, q: null }],
                 [{ o: true, l: null, q: { k: 'attack1' } }, { o: false, l: 'fire', q: null }]] } } },
       { id: 'u5', name: 'Schera', side: 'ally', hp: 17, ep: 55, cp: 200,
-        sh: { v: 3, lvl: 3, str: 10, dex: 16, con: 13, int: 14, wis: 10, cha: 16, frame: 'Phantom', armor: 'lightr', mv: 6, epBase: 64,
+        sh: { v: 3, lvl: 3, str: 10, dex: 16, con: 13, int: 14, wis: 10, cha: 16, sk: { performance: 1, persuasion: 1, deception: 1, sleight: 1, perception: 1 }, frame: 'Phantom', armor: 'lightr', mv: 6, epBase: 64,
           crafts: [{ n: 'Fire Whip', cp: 20, d: 30, x: 'Reach 3, 1d8 + DEX; Burn on d20 17+' }], sc: { n: 'Valkyrie Dance', x: 'Circle r2, 5d8 + DEX' } } },
       { id: 'u6', name: 'Knight', side: 'enemy', speed: -2 }
     ];
@@ -1914,6 +1984,7 @@ td .stlist { margin-top: 4px; }
       c('Proficiency', fmtSigned(d.prof)),
       c('Art attack', fmtSigned(d.artAtk), 'Single-target attack arts: d20 + proficiency + INT vs AC'),
       c('Art DC', d.artDC, '8 + proficiency + INT: area attack arts and debuffs'),
+      c('Craft DC', d.craftDC, '8 + proficiency + STR or DEX: saves against area crafts'),
       c('Heals & revives', fmtSigned(d.wis), 'Add your WIS modifier to heals and revives'),
       c('Buff turns', fmtSigned(d.wis), 'Your buffs last their listed turns + WIS'),
       c('Ailments on you', fmtSigned(-d.wis) + ' turns', 'Ailments and stat downs last their listed turns − your WIS (minimum 1)'),
@@ -1945,6 +2016,45 @@ td .stlist { margin-top: 4px; }
     const der = $(pre + '-der'); if (der) der.innerHTML = derivedHtml(u);
     const d = derive(u);
     ABIL.forEach(a => { const m = $(`${pre}-m-${a}`); if (m) m.textContent = abText(d, u.sh, a); });
+  }
+  /* ---------- skills & saving throws (GM panel and phones share this) ---------- */
+  const svText = v => `${fmtSigned(v.t)}${v.dis ? ' <span class="dis">dis.</span>' : ''}`;
+  function skillsHtml(u, pre) {
+    const sh = u.sh, d = derive(u), fr = d.fr;
+    const abOpts = [['', '—']].concat(ABIL.map(a => [a, ABIL_LABEL[a]]));
+    const sel = (k, opts, lbl) => `<select id="${pre}-${k}" data-sh="${k}" data-id="${u.id}" ${lbl ? `aria-label="${lbl}"` : ''}>${opts.map(([v, l]) => `<option value="${v}" ${String(sh[k]) === String(v) ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+    const saves = ABIL.map(a => { const v = d.saves[a];
+      return `<div class="sv ${v.p ? 'pro' : ''}" title="${esc([ABIL_LABEL[a] + ' ' + fmtSigned(d.mods[a]), v.p ? `proficiency ${fmtSigned(d.prof)}` : '', ...v.bits].filter(Boolean).join(', '))}">
+        <span class="abk">${ABIL_LABEL[a]}</span><b id="${pre}-sv-${a}">${svText(v)}</b><span class="svp">${v.p ? 'proficient' : '&nbsp;'}</span></div>`; }).join('');
+    const svFrom = fr ? `<p class="frameinfo">Save proficiencies from ${esc(sh.frame)}: <b>${fr.saves.map(a => ABIL_LABEL[a]).join(', ')}</b>.</p>`
+      : `<div class="shrow"><label>Save proficiency ${sel('sv1', abOpts)}</label><label>Save proficiency ${sel('sv2', abOpts)}</label>
+         <p class="frameinfo">Custom frame: pick one common save (DEX, CON or WIS) and one rarer one (STR, INT or LCK).</p></div>`;
+    const badge = (sh.acc1 === 'badge' || sh.acc2 === 'badge') ? `<div class="shrow"><label>Silver badge: +1 to ${sel('badge', abOpts)} saves</label></div>` : '';
+    const extras = [d.fx.asave ? `+${d.fx.asave} to saves against arts (quartz)` : '', d.notProf ? `Disadvantage on STR and DEX saves and checks (not proficient in ${d.arm.n})` : '']
+      .filter(Boolean).map(x => `<p class="frameinfo">${esc(x)}</p>`).join('');
+    const nProf = Object.keys(sh.sk).length, goal = skillGoal(sh.lvl);
+    const skills = SKILLS.map(([k, n, a]) => { const v = d.skills[k];
+      return `<div class="skrow ${v.lv ? 'pro' : ''}" title="${esc([ABIL_LABEL[a] + ' ' + fmtSigned(d.mods[a]), v.lv ? `proficiency ${fmtSigned(d.prof * v.lv)}${v.lv === 2 ? ' (expertise)' : ''}` : '', ...v.bits, k === 'stealth' && d.arm.stealth ? 'disadvantage: ' + d.arm.n : ''].filter(Boolean).join(', '))}">
+        <span class="skn">${n}<i>${ABIL_LABEL[a]}</i></span><b id="${pre}-sk-${k}">${svText(v)}</b>
+        <select id="${pre}-skp-${k}" data-sh="sk" data-id="${u.id}" aria-label="${n} proficiency">${[[0, '—'], [1, 'Prof'], [2, 'Expert']].map(([lv, l]) =>
+          `<option value="${k}:${lv}" ${v.lv === lv ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`; }).join('');
+    return `<div class="sheet">
+      <h3>Saving throws</h3>
+      <div class="saves">${saves}</div>
+      ${svFrom}${badge}${extras}
+      <h3>Skills</h3>
+      <p class="frameinfo" id="${pre}-skcount">${nProf} skill proficienc${nProf === 1 ? 'y' : 'ies'} · at level ${sh.lvl}, about ${goal} skills or tools (4 to start, +1 every 3 levels) · Passive Perception ${10 + d.skills.perception.t}</p>
+      <div class="skills">${skills}</div>
+      <label class="grow">Tools &amp; other proficiencies <input type="text" id="${pre}-tools" value="${esc(sh.tools)}" maxlength="120" data-sh="tools" data-id="${u.id}" placeholder="e.g. Thieves' tools, driving, orbal engineering" autocomplete="off"></label>
+    </div>`;
+  }
+  /* Rebuild unless someone is using a control in it; the totals always refresh. */
+  function fillSkills(el, u, pre) {
+    const typing = el.contains(document.activeElement) && document.activeElement.matches('input, select, textarea');
+    if (el.dataset.key !== u.id || !typing) { el.innerHTML = skillsHtml(u, pre); el.dataset.key = u.id; return; }
+    const d = derive(u);
+    ABIL.forEach(a => { const x = $(`${pre}-sv-${a}`); if (x) x.innerHTML = svText(d.saves[a]); });
+    SKILLS.forEach(([k]) => { const x = $(`${pre}-sk-${k}`); if (x) { x.innerHTML = svText(d.skills[k]); x.parentNode.classList.toggle('pro', !!d.skills[k].lv); } });
   }
   /* ---------- orbment builder (GM panel and phones share this) ---------- */
   let orbSel = null; // { id, li, si }: the slot whose picker is open on this screen
@@ -2073,6 +2183,7 @@ td .stlist { margin-top: 4px; }
         <button class="btn small ghost" data-cmd="closesheet">Close</button></div>`;
     }
     fillSheet($('sheetBody'), u, 'gs');
+    fillSkills($('skillBody'), u, 'gk');
     fillOrb($('orbBody'), u, 'go', true);
   }
 
@@ -2151,7 +2262,7 @@ td .stlist { margin-top: 4px; }
 
   /* The player's own character panel in the ATB tab (phones only). */
   let amKey = null, amSwitch = false, amWaiting = false, amTab = 'combat';
-  try { const t = localStorage.getItem('atb-am-tab'); if (['combat', 'sheet', 'orb'].includes(t)) amTab = t; } catch (e) {}
+  try { const t = localStorage.getItem('atb-am-tab'); if (['combat', 'sheet', 'skills', 'orb'].includes(t)) amTab = t; } catch (e) {}
   function renderAtbMe() {
     const el = $('atbMe');
     const allies = S.units.filter(tracked);
@@ -2168,6 +2279,7 @@ td .stlist { margin-top: 4px; }
     $('am-tags').innerHTML = partyTags(me);
     $('am-status').textContent = amStatus(me, cur);
     if (amTab === 'sheet') fillSheet($('am-sheet'), me, 'ps');
+    else if (amTab === 'skills') fillSkills($('am-skills'), me, 'pk');
     else if (amTab === 'orb') fillOrb($('am-orb'), me, 'po', false);
     else {
       const m = $('am-mira'); if (m) m.textContent = miraText();
@@ -2191,12 +2303,15 @@ td .stlist { margin-top: 4px; }
         </form>
         <p class="muted">This phone remembers your pick.</p><p class="errtext" id="amErr" hidden></p>`;
     }
-    const tabs = `<div class="tabs amtabs" role="tablist">${[['combat', 'Combat'], ['sheet', 'Sheet'], ['orb', 'Orbment']].map(([k, l]) =>
+    const tabs = `<div class="tabs amtabs" role="tablist">${[['combat', 'Combat'], ['sheet', 'Sheet'], ['skills', 'Skills'], ['orb', 'Orbment']].map(([k, l]) =>
       `<button role="tab" data-am="tab" data-tab="${k}" aria-selected="${amTab === k}">${l}</button>`).join('')}</div>`;
     const top = `<div class="panel-head"><div class="big">${esc(me.name)}</div><span id="am-tags"></span></div>
       <p class="muted" id="am-status"></p>
       <div class="grp" id="am-res"></div><div id="am-meta"></div>${tabs}`;
     if (amTab === 'orb') return top + `<div id="am-orb"></div><p class="errtext" id="amErr" hidden></p>
+      <div><button class="btn small ghost" data-am="switch">Not you?</button></div>`;
+    if (amTab === 'skills') return top + `<div id="am-skills"></div>
+      <p class="errtext" id="amErr" hidden></p>
       <div><button class="btn small ghost" data-am="switch">Not you?</button></div>`;
     if (amTab === 'sheet') return top + `<div id="am-sheet"></div>
       <p class="muted" style="font-size:.85rem">Changes go straight to your sheet; the GM sees each one.</p>
