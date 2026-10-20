@@ -598,6 +598,7 @@ td .stlist { margin-top: 4px; }
   const BONUS = {
     crit: { label: 'CRIT', cls: 'red', desc: 'Critical: damage or healing this turn ×1.5', w: 3 },
     hp10: { label: 'HEAL 10%', cls: 'green', desc: 'Restore 10% max HP at the start of the turn', w: 3 },
+    hp20: { label: 'HEAL 20%', cls: 'green', desc: 'Restore 20% max HP at the start of the turn', w: 2 },
     hp50: { label: 'HEAL 50%', cls: 'green', desc: 'Restore 50% max HP at the start of the turn', w: 1 },
     ep10: { label: 'EP 10%', cls: 'blue', desc: 'Restore 10% max EP at the start of the turn', w: 2 },
     ep50: { label: 'EP 50%', cls: 'blue', desc: 'Restore 50% max EP at the start of the turn', w: 1 },
@@ -1175,7 +1176,7 @@ td .stlist { margin-top: 4px; }
   /* The AT bonus a unit lands on: heal / EP / CP bonuses apply on their own; CRIT is still called at the table. */
   function applyBonus(u, b) {
     if (!tracked(u) || !b || b === 'none') return;
-    const pct = { hp10: ['hp', .1], hp50: ['hp', .5], ep10: ['ep', .1], ep50: ['ep', .5] }[b];
+    const pct = { hp10: ['hp', .1], hp20: ['hp', .2], hp50: ['hp', .5], ep10: ['ep', .1], ep50: ['ep', .5] }[b];
     if (pct && u[pct[0] + 'Max'] > 0) bump(u, pct[0], Math.ceil(u[pct[0] + 'Max'] * pct[1]));
     if (b === 'cp20') bump(u, 'cp', 20);
     if (b === 'cp50') bump(u, 'cp', 50);
