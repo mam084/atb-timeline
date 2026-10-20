@@ -522,6 +522,7 @@ td .stlist { margin-top: 4px; }
       </form>
       <form class="addrow" id="stForm">
         <label>Status for <select id="st-who"></select></label>
+        <label title="Whose art or quartz: buffs add their WIS, ailments and stat downs add their LCK">From <select id="st-from"></select></label>
         <label class="grow">Status <select id="st-k"></select></label>
         <label>Turns <input type="number" id="st-t" min="1" max="99"></label>
         <button class="btn" type="submit">Add status</button>
@@ -617,8 +618,11 @@ td .stlist { margin-top: 4px; }
     skip: { label: 'Skip turn', cost: 'attack' }
   };
   const COST_LABELS = { attack: 'Attack', craft: 'Craft', castTime: 'Arts cast', afterCast: 'Arts after-cast', item: 'Item', move: 'Move', defend: 'Defend', scraft: 'S-Craft' };
-  const DEF_COSTS = { attack: 10, craft: 12, castTime: 6, afterCast: 8, item: 8, move: 6, defend: 8, scraft: 16 };
-  const DEF_SETTINGS = { show: 12, rate: 30, numbers: false, step: 3, mode: 'rate', pct: 10 };
+  /* Delays are Trails from Zero's base AT values (Core Rules › Action delays): an attack is a 30-tick turn. */
+  const DEF_COSTS = { attack: 30, craft: 30, castTime: 20, afterCast: 15, item: 20, move: 20, defend: 20, scraft: 40 };
+  const OLD_COSTS = { attack: 10, craft: 12, castTime: 6, afterCast: 8, item: 8, move: 6, defend: 8, scraft: 16 }; // before the Zero scale
+  const DEF_SETTINGS = { show: 12, rate: 30, numbers: false, step: 10, mode: 'rate', pct: 10 };
+  const SPEED_CAP = 3; // speed from all sources caps at ±3
   /* CP rules (see the rulebook): CP caps at 200. An S-Craft needs 100 and spends 100; at 200 it can be
      empowered and spends all 200. A character needs a regular turn between S-Crafts. */
   const CP_CAP = 200, S_MIN = 100;
@@ -637,7 +641,8 @@ td .stlist { margin-top: 4px; }
 
   /* ---------- character sheets (party members) ---------- */
   const ABIL = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
-  const ABIL_LABEL = { str: 'STR', dex: 'DEX', con: 'CON', int: 'INT', wis: 'WIS', cha: 'CHA' };
+  // LCK (luck) replaces CHA; it's still stored as "cha" so saved sheets keep their scores.
+  const ABIL_LABEL = { str: 'STR', dex: 'DEX', con: 'CON', int: 'INT', wis: 'WIS', cha: 'LCK' };
   /* Frames (Core Rules › Frames): hit die, speed, armor proficiency, and the orbment shape their EP tier maps to. */
   const FRAMES = {
     Bulwark: { hd: 12, spd: -1, ep: 'Low', arm: 3, lay: '3+1+1+1', feel: 'Tank' },
@@ -662,17 +667,54 @@ td .stlist { margin-top: 4px; }
     heavy: { n: 'Heavy (combat suit)', base: 16, cap: 0, tier: 3, str: 13 },
     heavyp: { n: 'Heavy, plated', base: 18, cap: 0, tier: 3, str: 15, stealth: 1 }
   };
-  const DEF_SHEET = { v: 2, lvl: 1, str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10, frame: 'Balanced', hd: 8, fspd: 0,
-    hpAdj: 0, epBase: 0, armor: 'none', mv: 6, orb: null, crafts: [], sc: { n: '', x: '' } };
+  /* Boots and accessories (Armor & Accessories tab). Numeric effects are applied; the rest show as notes. */
+  const BOOTS = {
+    std: { n: 'Standard boots', b: 'No bonus' },
+    light: { n: 'Light boots', b: '+1 square movement', mv: 1 },
+    grip: { n: 'Grip boots', b: 'Advantage against being pushed, pulled or knocked prone' },
+    sturdy: { n: 'Sturdy boots', b: '+1 to STR saving throws' }
+  };
+  const ACCESSORIES = Object.assign({
+    none: { n: 'None', b: '' },
+    vigor: { n: 'Vigor ring', b: '+5 max HP', hp: 5 },
+    focus: { n: 'Focus pendant', b: '+10 max EP', ep: 10 },
+    medal: { n: "Fighter's medal", b: 'Start each combat with +10 CP', cp: 10 },
+    badge: { n: 'Silver badge', b: '+1 to one saving throw of your choice' },
+    lens: { n: "Scout's lens", b: '+2 to Perception' },
+    gloves: { n: 'Grip gloves', b: '+2 to Athletics checks to grapple or shove' },
+    recorder: { n: 'Pocket recorder', b: 'Records up to an hour of sound; replays on demand' },
+    agency: { n: 'Agency ID', b: 'Advantage on checks to talk past guards and gatekeepers as a licensed investigator' }
+  }, Object.fromEntries(['petrify', 'freeze', 'burn', 'seal', 'mute', 'faint', 'sleep', 'confuse', 'blind'].map(k =>
+    ['ward_' + k, { n: `Ward charm (${k[0].toUpperCase() + k.slice(1)})`, b: `Immune to ${k[0].toUpperCase() + k.slice(1)}` }])));
+  /* Vantages (Character Options): History gives +2 to an ability score, Destiny +1. Fighting styles are flavor. */
+  const ARCANA = ['The Fool', 'The Magician', 'The High Priestess', 'The Empress', 'The Emperor', 'The Hierophant', 'The Lovers',
+    'The Chariot', 'Strength', 'The Hermit', 'Wheel of Fortune', 'Justice', 'The Hanged Man', 'Death', 'Temperance', 'The Devil',
+    'The Tower', 'The Star', 'The Moon', 'The Sun', 'Judgement', 'The World'];
+  const STYLES = ['Adaptability', 'Aggression', 'Bravery', 'Blitz', 'Conviction', 'Cruelty', 'Deception', 'Dominion', 'Dread', 'Elegance',
+    'Endurance', 'Equilibrium', 'Ferocity', 'Focus', 'Foresight', 'Fortune', 'Fury', 'Gluttony', 'Guardian', 'Harmony', 'Honor',
+    'Judgment', 'Mercy', 'Perseverance', 'Power', 'Precision', 'Reaving', 'Recklessness', 'Retaliation', 'Sacrifice', 'Savagery',
+    'Serenity', 'Speed', 'Tenacity', 'Tyranny', 'Unity', 'Valor', 'Zeal'];
+  const DEF_SHEET = { v: 3, lvl: 1, str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10, frame: 'Balanced', hd: 8, fspd: 0,
+    hpAdj: 0, epBase: 0, armor: 'none', mv: 6, orb: null, crafts: [], sc: { n: '', x: '' },
+    vhA: '', vhS: '', vdA: '', vdS: '', style: '', wpn: '', boots: 'std', acc1: 'none', acc2: 'none' };
   /* Every editable sheet field: [min, max] for numbers, 'text' (40 characters), or a list of allowed values. */
   const SHEET_FIELDS = { lvl: [1, 20], str: [1, 30], dex: [1, 30], con: [1, 30], int: [1, 30], wis: [1, 30], cha: [1, 30],
     frame: 'text', hd: ['6', '8', '10', '12'], fspd: [-1, 1], hpAdj: [-999, 999], epBase: [0, 9999],
-    armor: Object.keys(ARMOR), mv: [0, 30] };
+    armor: Object.keys(ARMOR), mv: [0, 30],
+    vhA: [''].concat(ARCANA), vhS: ['', 'str', 'dex', 'con', 'int', 'wis', 'cha'], vdA: [''].concat(ARCANA), vdS: ['', 'str', 'dex', 'con', 'int', 'wis', 'cha'],
+    style: [''].concat(STYLES), wpn: 'text', boots: Object.keys(BOOTS), acc1: Object.keys(ACCESSORIES), acc2: Object.keys(ACCESSORIES) };
   const SHEET_LABEL = { lvl: 'Level', frame: 'Frame', hd: 'Hit die', fspd: 'Frame speed', hpAdj: 'Bonus HP', epBase: 'Max EP',
-    armor: 'Armor', mv: 'Movement' };
+    armor: 'Armor', mv: 'Movement', vhA: 'History vantage', vhS: 'History +2', vdA: 'Destiny vantage', vdS: 'Destiny +1',
+    style: 'Fighting style', wpn: 'Weapon', boots: 'Boots', acc1: 'Accessory 1', acc2: 'Accessory 2' };
+  /* An ability score with Vantage bonuses: History +2, Destiny +1. */
+  const score = (sh, a) => (Number(sh[a]) || 0) + (sh.vhS === a ? 2 : 0) + (sh.vdS === a ? 1 : 0);
+  const gear = sh => [BOOTS[sh.boots] || BOOTS.std, ACCESSORIES[sh.acc1] || ACCESSORIES.none, ACCESSORIES[sh.acc2] || ACCESSORIES.none];
+  const gearSum = (sh, k) => gear(sh).reduce((n, g) => n + (g[k] || 0), 0);
   const MAX_CRAFTS = 12;
   function normSheet(sh, u) {
     const old = sh && !sh.v; // a sheet from before frames, armor and crafts
+    if (sh && sh.v === 2 && Array.isArray(sh.crafts)) // crafts set on the old 10-tick scale → Zero's (×2.5, to the nearest 5)
+      sh.crafts = sh.crafts.map(c => Object.assign({}, c, { d: Math.round((Number(c.d) || 12) * 2.5 / 5) * 5 }));
     sh = Object.assign({}, DEF_SHEET, sh || {});
     if (!u.sh) { // first time: keep what the tracker already had
       sh.epBase = u.epMax || 0;
@@ -685,7 +727,7 @@ td .stlist { margin-top: 4px; }
       if (!FRAMES[sh.frame]) sh.frame = sh.frame && sh.frame !== 'Custom' ? sh.frame : 'Custom';
       if (sh.hpBase > 0) sh.hpAdj = Math.max(-999, Math.min(999, sh.hpBase - baseHP(sh)));
     }
-    delete sh.hpBase; delete sh.acBase; delete sh.acAdj; sh.v = 2;
+    delete sh.hpBase; delete sh.acBase; delete sh.acAdj; sh.v = 3;
     sh.orb = normOrb(sh.orb);
     sh.crafts = (Array.isArray(sh.crafts) ? sh.crafts : []).slice(0, MAX_CRAFTS).map(cleanCraft);
     sh.sc = { n: String((sh.sc && sh.sc.n) || '').slice(0, 40), x: String((sh.sc && sh.sc.x) || '').slice(0, 120) };
@@ -695,21 +737,21 @@ td .stlist { margin-top: 4px; }
     const f = SHEET_FIELDS[k];
     if (!f) return null;
     if (f === 'text') return typeof v === 'string' ? v.trim().slice(0, 40) : '';
-    if (Array.isArray(f) && typeof f[0] === 'string') { const sv = String(v); return f.includes(sv) ? (k === 'hd' ? Number(sv) : sv) : null; }
+    if (Array.isArray(f) && typeof f[0] === 'string') { const sv = String(v ?? ''); return f.includes(sv) ? (k === 'hd' ? Number(sv) : sv) : null; }
     const n = Math.round(Number(v));
     return isFinite(n) ? Math.max(f[0], Math.min(f[1], n)) : null;
   }
   const cleanCraft = c => ({
     n: String((c && c.n) || '').slice(0, 40),
     cp: Math.max(0, Math.min(200, Math.round(Number(c && c.cp)) || 0)),
-    d: Math.max(1, Math.min(30, Math.round(Number(c && c.d)) || 12)),
+    d: Math.max(1, Math.min(60, Math.round(Number(c && c.d)) || 30)),
     x: String((c && c.x) || '').slice(0, 120)
   });
   const frameOf = sh => FRAMES[sh.frame] || null;
   const hitDie = sh => frameOf(sh) ? frameOf(sh).hd : sh.hd;
   /* 5e max HP: full hit die + CON at level 1, then the average (half the die + 1) + CON each level, at least 1 a level. */
   function baseHP(sh) {
-    const hd = hitDie(sh), con = abMod(sh.con);
+    const hd = hitDie(sh), con = abMod(score(sh, 'con'));
     return Math.max(1, hd + con) + (sh.lvl - 1) * Math.max(1, hd / 2 + 1 + con);
   }
 
@@ -717,24 +759,24 @@ td .stlist { margin-top: 4px; }
   const ELEM = ['earth', 'water', 'fire', 'wind', 'time', 'space', 'mirage'];
   const ELEM_LABEL = { earth: 'Earth', water: 'Water', fire: 'Fire', wind: 'Wind', time: 'Time', space: 'Space', mirage: 'Mirage' };
   const CENTER_EP = 90, SLOT_EP = [40, 55, 80, 115, 165, 220];
-  const EPCUT_PCT = 5;  // EP Cut 1: arts' EP cost −5% (Zero; EP Cut 2 is −10%)
-  const CAST_PCT = 25;  // Cast: time to cast arts is cut by 25% (Zero)
+  const EPCUT_PCT = 10; // EP Cut 1: arts' EP cost −10% (Daybreak's version)
+  const CAST_PCT = 10;  // Cast 1: arts' cast time −10% (Daybreak's version)
   /* Ways to split the 6 line slots into lines. */
   const LAYOUTS = ['6', '5+1', '4+2', '4+1+1', '3+3', '3+2+1', '3+1+1+1', '2+2+2', '2+2+1+1', '2+1+1+1+1', '1+1+1+1+1+1'];
   /* Tier 1 quartz. fx: ac, hp, ep, mv, spd, watk (weapon attack), wdmg (weapon damage), adm (art damage),
      dexSave, asave (saves vs arts), onHit (status a weapon hit lands on a 20). */
   const STARTERS = {
-    defense1: { n: 'Defense 1', el: 'earth', b: '+1 AC', fx: { ac: 1 } },
+    defense1: { n: 'Defense 1', el: 'earth', b: '−1 weapon damage taken', fx: { dr: 1 } },
     petrify1: { n: 'Petrify 1', el: 'earth', b: 'Weapon hits Petrify on d20 20', fx: { onHit: 'Petrify' } },
     hp1: { n: 'HP 1', el: 'water', b: '+5 max HP', fx: { hp: 5 } },
     freeze1: { n: 'Freeze 1', el: 'water', b: 'Weapon hits Freeze on d20 20', fx: { onHit: 'Freeze' } },
     attack1: { n: 'Attack 1', el: 'fire', b: '+1 weapon damage', fx: { wdmg: 1 } },
     burn1: { n: 'Burn 1', el: 'fire', b: 'Weapon hits Burn on d20 20', fx: { onHit: 'Burn' } },
-    evade1: { n: 'Evade 1', el: 'wind', b: '+1 to DEX saving throws', fx: { dexSave: 1 } },
+    evade1: { n: 'Evade 1', el: 'wind', b: '+1 AC', fx: { ac: 1 } },
     move1: { n: 'Move 1', el: 'wind', b: '+1 square movement', fx: { mv: 1 } },
     action1: { n: 'Action 1', el: 'time', b: '+1 speed (one per orbment)', fx: { spd: 1 } },
     faint1: { n: 'Faint 1', el: 'time', b: 'Weapon hits Faint on d20 20', fx: { onHit: 'Faint' } },
-    cast: { n: 'Cast', el: 'time', v: 3, b: `Arts cast ${CAST_PCT}% faster (one per orbment)`, fx: { castcut: 1 } },
+    cast1: { n: 'Cast 1', el: 'time', b: `Arts cast ${CAST_PCT}% faster`, fx: { castcut: 1 } },
     hit1: { n: 'Hit 1', el: 'space', b: '+1 to weapon attack rolls', fx: { watk: 1 } },
     epcut1: { n: 'EP Cut 1', el: 'space', b: `Arts cost ${EPCUT_PCT}% less EP (rounded down)`, fx: { epcut: 1 } },
     mind1: { n: 'Mind 1', el: 'mirage', b: '+1 to art damage rolls', fx: { adm: 1 } },
@@ -742,7 +784,7 @@ td .stlist { margin-top: 4px; }
     shield1: { n: 'Shield 1', el: 'water', b: '+1 to saving throws against arts', fx: { asave: 1 } }
   };
   /* All 58 of Zero's arts: n name, g element, ep, r requirements, c cast ticks, a recovery ticks, ar area, ro roll, fx effect. */
-  const ARTS = [{"n":"Stone Spike","g":"earth","ep":10,"r":{"earth":1},"c":6,"a":6,"ar":"Single","ro":"Attack","fx":"2d6; Petrify on d20 19+"},{"n":"Quake","g":"earth","ep":30,"r":{"earth":2},"c":6,"a":6,"ar":"Circle r3 on target","ro":"DEX save","fx":"3d6"},{"n":"Gorgon Breath","g":"earth","ep":40,"r":{"earth":4,"wind":1},"c":7,"a":6,"ar":"Circle r2 on target","ro":"DEX save","fx":"4d6; Petrify on d20 17+"},{"n":"Gaea Titanis","g":"earth","ep":80,"r":{"earth":6,"space":2},"c":9,"a":6,"ar":"Line, 4 wide","ro":"DEX save","fx":"6d6"},{"n":"Yggdrasil","g":"earth","ep":200,"r":{"earth":10,"water":1,"wind":3},"c":7,"a":6,"ar":"Circle r5 on a point","ro":"DEX save","fx":"11d6"},{"n":"Earth Pulse","g":"earth","ep":10,"r":{"earth":2,"water":1},"c":3,"a":10,"ar":"Single","ro":"—","fx":"Regen 10% max HP at the start of each turn, 5 turns"},{"n":"Crest","g":"earth","ep":10,"r":{"earth":1},"c":3,"a":10,"ar":"Single","ro":"—","fx":"+2 AC, 3 turns"},{"n":"La Crest","g":"earth","ep":30,"r":{"earth":3},"c":3,"a":10,"ar":"Circle r3","ro":"—","fx":"+2 AC, 3 turns"},{"n":"Adamantine Guard","g":"earth","ep":80,"r":{"earth":8,"space":3},"c":4,"a":10,"ar":"Circle r2","ro":"—","fx":"Negates the next weapon attack against each ally"},{"n":"Icicle Edge","g":"water","ep":10,"r":{"water":1},"c":6,"a":6,"ar":"Single","ro":"Attack","fx":"2d6; Freeze on d20 19+"},{"n":"Blue Drop","g":"water","ep":20,"r":{"water":2,"space":1},"c":6,"a":6,"ar":"Circle r2 on target","ro":"CON save","fx":"3d6"},{"n":"Ice Hammer","g":"water","ep":30,"r":{"water":4,"earth":1},"c":7,"a":6,"ar":"Circle r3 on target","ro":"CON save","fx":"4d6; Freeze on d20 17+"},{"n":"Hydro Cannon","g":"water","ep":40,"r":{"water":6,"wind":1},"c":7,"a":6,"ar":"Line, 3 wide","ro":"CON save","fx":"5d6"},{"n":"Diamond Dust","g":"water","ep":60,"r":{"water":8,"wind":1,"space":1},"c":9,"a":6,"ar":"Circle r2 on target","ro":"CON save","fx":"6d6; Freeze on d20 15+"},{"n":"Genesis Flood","g":"water","ep":220,"r":{"water":12},"c":9,"a":6,"ar":"All enemies","ro":"CON save","fx":"9d6"},{"n":"Tear","g":"water","ep":10,"r":{"water":1},"c":1,"a":8,"ar":"Single","ro":"—","fx":"Heal 2d8 + mod; cures Burn"},{"n":"Teara","g":"water","ep":30,"r":{"water":3},"c":1,"a":8,"ar":"Single","ro":"—","fx":"Heal 4d8 + mod; cures Burn"},{"n":"Tearal","g":"water","ep":60,"r":{"water":6},"c":2,"a":8,"ar":"Single","ro":"—","fx":"Heal 8d8 + mod; cures Burn"},{"n":"Thelas","g":"water","ep":30,"r":{"water":2},"c":1,"a":8,"ar":"Single","ro":"—","fx":"Revive from 0 HP with 2d8 + mod"},{"n":"Athelas","g":"water","ep":80,"r":{"water":8},"c":3,"a":8,"ar":"Single","ro":"—","fx":"Revive from 0 HP with 4d8 + mod"},{"n":"Cobalt Sphere","g":"water","ep":10,"r":{"water":2,"time":1},"c":3,"a":8,"ar":"Circle r3","ro":"WIS save","fx":"Mute on a failed save, 5 turns"},{"n":"Aqua Mirage","g":"water","ep":40,"r":{"water":5,"wind":3},"c":3,"a":8,"ar":"Circle r3","ro":"—","fx":"Weapon attacks against allies have disadvantage, 3 turns"},{"n":"Fire Bolt","g":"fire","ep":10,"r":{"fire":1},"c":6,"a":6,"ar":"Single","ro":"Attack","fx":"2d6; Burn on d20 19+"},{"n":"Heatwave","g":"fire","ep":25,"r":{"fire":3,"wind":1},"c":7,"a":6,"ar":"Circle r3 on target","ro":"DEX save","fx":"3d6"},{"n":"Magna Blaze","g":"fire","ep":30,"r":{"fire":4,"earth":1},"c":7,"a":6,"ar":"Single","ro":"Attack","fx":"4d6; Burn on d20 15+"},{"n":"Flare Butterfly","g":"fire","ep":90,"r":{"fire":8,"wind":3},"c":9,"a":6,"ar":"Circle r5 on target","ro":"DEX save","fx":"6d6; Burn on d20 17+"},{"n":"Crimson Ray","g":"fire","ep":140,"r":{"fire":12},"c":10,"a":6,"ar":"Single","ro":"Attack","fx":"16d6"},{"n":"Impassion","g":"fire","ep":40,"r":{"fire":5,"wind":1,"space":1},"c":4,"a":10,"ar":"Circle r3","ro":"—","fx":"+10 CP at the start of each turn, 5 turns"},{"n":"Forte","g":"fire","ep":10,"r":{"fire":1},"c":3,"a":10,"ar":"Single","ro":"—","fx":"+1d4 weapon damage, 3 turns"},{"n":"La Forte","g":"fire","ep":30,"r":{"fire":3},"c":3,"a":10,"ar":"Circle r3","ro":"—","fx":"+1d4 weapon damage, 3 turns"},{"n":"Sparkle","g":"wind","ep":10,"r":{"wind":1},"c":4,"a":6,"ar":"Single","ro":"Attack","fx":"2d6; Seal on d20 19+"},{"n":"Aero Sickle","g":"wind","ep":20,"r":{"wind":2,"mirage":1},"c":4,"a":6,"ar":"Line, 2 wide","ro":"DEX save","fx":"3d6"},{"n":"Aerial","g":"wind","ep":30,"r":{"wind":4},"c":6,"a":6,"ar":"Circle r3 on a point","ro":"DEX save","fx":"4d6"},{"n":"Spark Dyne","g":"wind","ep":50,"r":{"wind":6,"space":2},"c":6,"a":6,"ar":"Circle r2 on target","ro":"DEX save","fx":"5d6; Seal on d20 15+"},{"n":"Thunder Cyclone","g":"wind","ep":180,"r":{"wind":10,"time":1,"space":2},"c":7,"a":6,"ar":"Circle r5 on a point","ro":"DEX save","fx":"10d6; Seal on d20 17+"},{"n":"Breath","g":"wind","ep":30,"r":{"wind":2,"water":1},"c":3,"a":8,"ar":"Circle r2","ro":"—","fx":"Heal 4d8 + mod each"},{"n":"Holy Breath","g":"wind","ep":60,"r":{"wind":4,"water":2},"c":3,"a":8,"ar":"Circle r5","ro":"—","fx":"Heal 8d8 + mod each"},{"n":"Recuria","g":"wind","ep":40,"r":{"wind":5},"c":3,"a":8,"ar":"Circle r5","ro":"—","fx":"Cures all ailments except K.O."},{"n":"Lorelei","g":"wind","ep":50,"r":{"wind":6,"time":1,"space":1,"mirage":2},"c":4,"a":8,"ar":"All enemies","ro":"WIS save","fx":"Sleep on d20 11+, 5 turns"},{"n":"Sylphid","g":"wind","ep":20,"r":{"wind":2,"space":1},"c":3,"a":8,"ar":"Circle r3","ro":"—","fx":"+4 squares movement, 3 turns"},{"n":"Soul Blur","g":"time","ep":10,"r":{"time":2},"c":4,"a":6,"ar":"Single","ro":"Attack","fx":"2d6; Faint on d20 19+"},{"n":"Death Spiral","g":"time","ep":60,"r":{"time":6,"space":1,"mirage":2},"c":6,"a":6,"ar":"Circle r3 on target","ro":"WIS save","fx":"5d6; K.O. on d20 19+"},{"n":"Shadow Blade","g":"time","ep":140,"r":{"time":10,"space":1,"mirage":3},"c":7,"a":6,"ar":"Circle r5 on target","ro":"WIS save","fx":"8d6; caster heals 5% of damage dealt"},{"n":"Chrono Down","g":"time","ep":10,"r":{"time":1},"c":3,"a":10,"ar":"Circle r3","ro":"WIS save","fx":"−2 speed, 3 turns"},{"n":"Calamity Claw","g":"time","ep":60,"r":{"time":8},"c":4,"a":10,"ar":"Circle r5","ro":"WIS save","fx":"−3 speed and −3 squares movement, 3 turns"},{"n":"Chrono Drive","g":"time","ep":20,"r":{"time":3},"c":3,"a":10,"ar":"Circle r3","ro":"—","fx":"+2 speed, 3 turns"},{"n":"Dark Matter","g":"space","ep":60,"r":{"space":6},"c":7,"a":6,"ar":"Circle r5 on a point","ro":"CON save","fx":"4d6; pulls targets to the center; −2 squares movement, 3 turns"},{"n":"Last Disaster","g":"space","ep":220,"r":{"space":12,"mirage":8},"c":10,"a":6,"ar":"Line, 3 wide","ro":"CON save","fx":"14d6"},{"n":"Celestial","g":"space","ep":240,"r":{"space":10,"water":8},"c":4,"a":10,"ar":"Circle r5","ro":"—","fx":"Revive and heal 8d8 + mod each"},{"n":"Innocence Arc","g":"space","ep":10,"r":{"space":2},"c":4,"a":10,"ar":"All allies","ro":"—","fx":"Removes stat debuffs"},{"n":"Fortuna","g":"space","ep":30,"r":{"space":4,"water":1,"mirage":1},"c":3,"a":10,"ar":"Circle r5","ro":"—","fx":"+1d4 art damage and +2 to saves against arts, 3 turns"},{"n":"A-Reflex","g":"space","ep":40,"r":{"space":6},"c":3,"a":10,"ar":"Single","ro":"—","fx":"Reflects the next art back at its caster"},{"n":"Chaos Brand","g":"mirage","ep":30,"r":{"mirage":4},"c":7,"a":6,"ar":"Single","ro":"Attack","fx":"4d6; Confuse on d20 19+"},{"n":"Galion Tower","g":"mirage","ep":100,"r":{"mirage":6,"time":1,"space":2},"c":9,"a":6,"ar":"Circle r5 on target","ro":"INT save","fx":"5d6; Blind on a failed save, 5 turns"},{"n":"Avalon Gate","g":"mirage","ep":250,"r":{"mirage":12,"time":1,"space":4},"c":9,"a":6,"ar":"All enemies","ro":"INT save","fx":"10d6"},{"n":"Lunar Craze","g":"mirage","ep":50,"r":{"mirage":6},"c":4,"a":10,"ar":"Circle r5","ro":"WIS save","fx":"Confuse on a failed save, 3 turns; only targets lower in level than the caster"},{"n":"Saint","g":"mirage","ep":30,"r":{"mirage":3,"earth":1,"fire":1},"c":3,"a":10,"ar":"Single","ro":"—","fx":"+1d4 weapon damage and +2 AC, 3 turns"},{"n":"Hollow Sphere","g":"mirage","ep":40,"r":{"mirage":5,"water":1,"wind":3},"c":3,"a":10,"ar":"Single","ro":"—","fx":"Stealth: can't be targeted, 2 turns"}];
+  const ARTS = [{"n":"Stone Spike","g":"earth","ep":10,"r":{"earth":1},"c":20,"a":15,"ar":"Single","ro":"Attack","fx":"2d6; Petrify on d20 19+"},{"n":"Quake","g":"earth","ep":30,"r":{"earth":2},"c":20,"a":15,"ar":"Circle r3 on target","ro":"DEX save","fx":"3d6"},{"n":"Gorgon Breath","g":"earth","ep":40,"r":{"earth":4,"wind":1},"c":25,"a":15,"ar":"Circle r2 on target","ro":"DEX save","fx":"4d6; Petrify on d20 17+"},{"n":"Gaea Titanis","g":"earth","ep":80,"r":{"earth":6,"space":2},"c":30,"a":15,"ar":"Line, 4 wide","ro":"DEX save","fx":"6d6"},{"n":"Yggdrasil","g":"earth","ep":200,"r":{"earth":10,"water":1,"wind":3},"c":25,"a":15,"ar":"Circle r5 on a point","ro":"DEX save","fx":"11d6"},{"n":"Earth Pulse","g":"earth","ep":10,"r":{"earth":2,"water":1},"c":10,"a":25,"ar":"Single","ro":"—","fx":"Regen 10% max HP at the start of each turn, 4 turns"},{"n":"Crest","g":"earth","ep":10,"r":{"earth":1},"c":10,"a":25,"ar":"Single","ro":"—","fx":"+2 AC, 2 turns"},{"n":"La Crest","g":"earth","ep":30,"r":{"earth":3},"c":12,"a":25,"ar":"Circle r3","ro":"—","fx":"+2 AC, 2 turns"},{"n":"Adamantine Guard","g":"earth","ep":80,"r":{"earth":8,"space":3},"c":15,"a":25,"ar":"Circle r2","ro":"—","fx":"Negates the next weapon attack against each ally"},{"n":"Icicle Edge","g":"water","ep":10,"r":{"water":1},"c":20,"a":15,"ar":"Single","ro":"Attack","fx":"2d6; Freeze on d20 19+"},{"n":"Blue Drop","g":"water","ep":20,"r":{"water":2,"space":1},"c":20,"a":15,"ar":"Circle r2 on target","ro":"CON save","fx":"3d6"},{"n":"Ice Hammer","g":"water","ep":30,"r":{"water":4,"earth":1},"c":25,"a":15,"ar":"Circle r3 on target","ro":"CON save","fx":"4d6; Freeze on d20 17+"},{"n":"Hydro Cannon","g":"water","ep":40,"r":{"water":6,"wind":1},"c":25,"a":15,"ar":"Line, 3 wide","ro":"CON save","fx":"5d6"},{"n":"Diamond Dust","g":"water","ep":60,"r":{"water":8,"wind":1,"space":1},"c":30,"a":15,"ar":"Circle r2 on target","ro":"CON save","fx":"6d6; Freeze on d20 15+"},{"n":"Genesis Flood","g":"water","ep":220,"r":{"water":12},"c":30,"a":15,"ar":"All enemies","ro":"CON save","fx":"9d6"},{"n":"Tear","g":"water","ep":10,"r":{"water":1},"c":3,"a":20,"ar":"Single","ro":"—","fx":"Heal 2d8 + mod; cures Burn"},{"n":"Teara","g":"water","ep":30,"r":{"water":3},"c":4,"a":20,"ar":"Single","ro":"—","fx":"Heal 4d8 + mod; cures Burn"},{"n":"Tearal","g":"water","ep":60,"r":{"water":6},"c":6,"a":20,"ar":"Single","ro":"—","fx":"Heal 8d8 + mod; cures Burn"},{"n":"Thelas","g":"water","ep":30,"r":{"water":2},"c":5,"a":20,"ar":"Single","ro":"—","fx":"Revive from 0 HP with 2d8 + mod"},{"n":"Athelas","g":"water","ep":80,"r":{"water":8},"c":10,"a":20,"ar":"Single","ro":"—","fx":"Revive from 0 HP with 4d8 + mod"},{"n":"Cobalt Sphere","g":"water","ep":10,"r":{"water":2,"time":1},"c":10,"a":20,"ar":"Circle r3","ro":"WIS save","fx":"Mute on a failed save, 4 turns"},{"n":"Aqua Mirage","g":"water","ep":40,"r":{"water":5,"wind":3},"c":12,"a":20,"ar":"Circle r3","ro":"—","fx":"Weapon attacks against allies have disadvantage, 2 turns"},{"n":"Fire Bolt","g":"fire","ep":10,"r":{"fire":1},"c":20,"a":15,"ar":"Single","ro":"Attack","fx":"2d6; Burn on d20 19+"},{"n":"Heatwave","g":"fire","ep":25,"r":{"fire":3,"wind":1},"c":25,"a":15,"ar":"Circle r3 on target","ro":"DEX save","fx":"3d6"},{"n":"Magna Blaze","g":"fire","ep":30,"r":{"fire":4,"earth":1},"c":25,"a":15,"ar":"Single","ro":"Attack","fx":"4d6; Burn on d20 15+"},{"n":"Flare Butterfly","g":"fire","ep":90,"r":{"fire":8,"wind":3},"c":30,"a":15,"ar":"Circle r5 on target","ro":"DEX save","fx":"6d6; Burn on d20 17+"},{"n":"Crimson Ray","g":"fire","ep":140,"r":{"fire":12},"c":35,"a":15,"ar":"Single","ro":"Attack","fx":"16d6"},{"n":"Impassion","g":"fire","ep":40,"r":{"fire":5,"wind":1,"space":1},"c":15,"a":25,"ar":"Circle r3","ro":"—","fx":"+10 CP at the start of each turn, 4 turns"},{"n":"Forte","g":"fire","ep":10,"r":{"fire":1},"c":10,"a":25,"ar":"Single","ro":"—","fx":"+1d4 weapon damage, 2 turns"},{"n":"La Forte","g":"fire","ep":30,"r":{"fire":3},"c":12,"a":25,"ar":"Circle r3","ro":"—","fx":"+1d4 weapon damage, 2 turns"},{"n":"Sparkle","g":"wind","ep":10,"r":{"wind":1},"c":15,"a":15,"ar":"Single","ro":"Attack","fx":"2d6; Seal on d20 19+"},{"n":"Aero Sickle","g":"wind","ep":20,"r":{"wind":2,"mirage":1},"c":15,"a":15,"ar":"Line, 2 wide","ro":"DEX save","fx":"3d6"},{"n":"Aerial","g":"wind","ep":30,"r":{"wind":4},"c":20,"a":15,"ar":"Circle r3 on a point","ro":"DEX save","fx":"4d6"},{"n":"Spark Dyne","g":"wind","ep":50,"r":{"wind":6,"space":2},"c":20,"a":15,"ar":"Circle r2 on target","ro":"DEX save","fx":"5d6; Seal on d20 15+"},{"n":"Thunder Cyclone","g":"wind","ep":180,"r":{"wind":10,"time":1,"space":2},"c":25,"a":15,"ar":"Circle r5 on a point","ro":"DEX save","fx":"10d6; Seal on d20 17+"},{"n":"Breath","g":"wind","ep":30,"r":{"wind":2,"water":1},"c":10,"a":20,"ar":"Circle r2","ro":"—","fx":"Heal 4d8 + mod each"},{"n":"Holy Breath","g":"wind","ep":60,"r":{"wind":4,"water":2},"c":12,"a":20,"ar":"Circle r5","ro":"—","fx":"Heal 8d8 + mod each"},{"n":"Recuria","g":"wind","ep":40,"r":{"wind":5},"c":12,"a":20,"ar":"Circle r5","ro":"—","fx":"Cures all ailments except K.O."},{"n":"Lorelei","g":"wind","ep":50,"r":{"wind":6,"time":1,"space":1,"mirage":2},"c":15,"a":20,"ar":"All enemies","ro":"WIS save","fx":"Sleep on d20 11+, 4 turns"},{"n":"Sylphid","g":"wind","ep":20,"r":{"wind":2,"space":1},"c":12,"a":20,"ar":"Circle r3","ro":"—","fx":"+4 squares movement, 2 turns"},{"n":"Soul Blur","g":"time","ep":10,"r":{"time":2},"c":15,"a":15,"ar":"Single","ro":"Attack","fx":"2d6; Faint on d20 19+"},{"n":"Death Spiral","g":"time","ep":60,"r":{"time":6,"space":1,"mirage":2},"c":20,"a":15,"ar":"Circle r3 on target","ro":"WIS save","fx":"5d6; K.O. on d20 19+"},{"n":"Shadow Blade","g":"time","ep":140,"r":{"time":10,"space":1,"mirage":3},"c":25,"a":15,"ar":"Circle r5 on target","ro":"WIS save","fx":"8d6; caster heals 5% of damage dealt"},{"n":"Chrono Down","g":"time","ep":10,"r":{"time":1},"c":10,"a":25,"ar":"Circle r3","ro":"WIS save","fx":"−2 speed, 2 turns"},{"n":"Calamity Claw","g":"time","ep":60,"r":{"time":8},"c":15,"a":25,"ar":"Circle r5","ro":"WIS save","fx":"−3 speed and −3 squares movement, 2 turns"},{"n":"Chrono Drive","g":"time","ep":20,"r":{"time":3},"c":10,"a":25,"ar":"Circle r3","ro":"—","fx":"+2 speed, 2 turns"},{"n":"Dark Matter","g":"space","ep":60,"r":{"space":6},"c":25,"a":15,"ar":"Circle r5 on a point","ro":"CON save","fx":"4d6; pulls targets to the center; −2 squares movement, 2 turns"},{"n":"Last Disaster","g":"space","ep":220,"r":{"space":12,"mirage":8},"c":35,"a":15,"ar":"Line, 3 wide","ro":"CON save","fx":"14d6"},{"n":"Celestial","g":"space","ep":240,"r":{"space":10,"water":8},"c":15,"a":25,"ar":"Circle r5","ro":"—","fx":"Revive and heal 8d8 + mod each"},{"n":"Innocence Arc","g":"space","ep":10,"r":{"space":2},"c":15,"a":25,"ar":"All allies","ro":"—","fx":"Removes stat debuffs"},{"n":"Fortuna","g":"space","ep":30,"r":{"space":4,"water":1,"mirage":1},"c":12,"a":25,"ar":"Circle r5","ro":"—","fx":"+1d4 art damage and +2 to saves against arts, 2 turns"},{"n":"A-Reflex","g":"space","ep":40,"r":{"space":6},"c":12,"a":25,"ar":"Single","ro":"—","fx":"Reflects the next art back at its caster"},{"n":"Chaos Brand","g":"mirage","ep":30,"r":{"mirage":4},"c":25,"a":15,"ar":"Single","ro":"Attack","fx":"4d6; Confuse on d20 19+"},{"n":"Galion Tower","g":"mirage","ep":100,"r":{"mirage":6,"time":1,"space":2},"c":30,"a":15,"ar":"Circle r5 on target","ro":"INT save","fx":"5d6; Blind on a failed save, 4 turns"},{"n":"Avalon Gate","g":"mirage","ep":250,"r":{"mirage":12,"time":1,"space":4},"c":30,"a":15,"ar":"All enemies","ro":"INT save","fx":"10d6"},{"n":"Lunar Craze","g":"mirage","ep":50,"r":{"mirage":6},"c":15,"a":25,"ar":"Circle r5","ro":"WIS save","fx":"Confuse on a failed save, 2 turns; only targets lower in level than the caster"},{"n":"Saint","g":"mirage","ep":30,"r":{"mirage":3,"earth":1,"fire":1},"c":12,"a":25,"ar":"Single","ro":"—","fx":"+1d4 weapon damage and +2 AC, 2 turns"},{"n":"Hollow Sphere","g":"mirage","ep":40,"r":{"mirage":5,"water":1,"wind":3},"c":12,"a":25,"ar":"Single","ro":"—","fx":"Stealth: can't be targeted, 2 turns"}];
   const ARTS_BY = Object.fromEntries(ARTS.map(a => [a.n.toLowerCase(), a]));
   const zeroEl = () => Object.fromEntries(ELEM.map(e => [e, 0]));
   const reqText = r => Object.keys(r).map(e => `${ELEM_LABEL[e]} ${r[e]}`).join(', ');
@@ -756,6 +798,7 @@ td .stlist { margin-top: 4px; }
   /* Clean a quartz sent from a phone; null if it isn't valid. */
   function cleanQ(q) {
     if (!q || typeof q !== 'object') return null;
+    if (q.k === 'cast') return { k: 'cast1' }; // the Zero-style "Cast" became Daybreak's Cast 1
     if (q.k) return STARTERS[q.k] ? { k: q.k } : null;
     if (!ELEM.includes(q.el)) return null;
     const n = String(q.n || '').trim().slice(0, 24);
@@ -807,10 +850,10 @@ td .stlist { margin-top: 4px; }
     const cut = tracked(u) && u.sh ? orbFx(u.sh.orb).epcut : 0;
     return cut ? Math.max(1, Math.floor(a.ep * (1 - EPCUT_PCT / 100 * cut))) : a.ep;
   }
-  /* An art's cast time for this caster: a Cast quartz cuts it by 25%. */
+  /* An art's cast time for this caster: each Cast 1 quartz cuts it by 10%. */
   function castTime(u, a) {
     const cut = tracked(u) && u.sh ? orbFx(u.sh.orb).castcut : 0;
-    return cut ? r1(a.c * (1 - CAST_PCT / 100)) : a.c;
+    return cut ? r1(Math.max(1, a.c * (1 - CAST_PCT / 100 * cut))) : a.c;
   }
   const meets = (t, r) => Object.keys(r).every(e => (t[e] || 0) >= r[e]);
   const missing = (t, r) => Object.keys(r).reduce((n, e) => n + Math.max(0, r[e] - (t[e] || 0)), 0);
@@ -829,14 +872,13 @@ td .stlist { margin-top: 4px; }
     return ep;
   }
   function orbFx(o) {
-    const fx = { ac: 0, hp: 0, ep: 0, mv: 0, spd: 0, watk: 0, wdmg: 0, adm: 0, dexSave: 0, asave: 0, epcut: 0, castcut: 0, onHit: [] };
+    const fx = { ac: 0, hp: 0, ep: 0, mv: 0, spd: 0, watk: 0, wdmg: 0, adm: 0, dexSave: 0, asave: 0, epcut: 0, castcut: 0, dr: 0, onHit: [] };
     if (!o) return fx;
     placed(o).forEach(qi => Object.keys(qi.fx || {}).forEach(k => {
       if (k === 'onHit') { if (!fx.onHit.includes(qi.fx.onHit)) fx.onHit.push(qi.fx.onHit); }
       else fx[k] += qi.fx[k];
     }));
     fx.spd = Math.min(1, fx.spd); // Action quartz: one per orbment
-    fx.castcut = Math.min(1, fx.castcut); // Cast: one per orbment
     return fx;
   }
 
@@ -847,24 +889,24 @@ td .stlist { margin-top: 4px; }
     petrify: { n: 'Petrify', kind: 'ail', t: null, noAct: 1, d: 'Petrified (5e). CON save at the end of each turn, or cured.' },
     freeze: { n: 'Freeze', kind: 'ail', t: null, skip: 1, d: "Can't act; next turn is skipped." },
     faint: { n: 'Faint', kind: 'ail', t: null, skip: 1, d: 'Stunned; next turn is skipped.' },
-    sleep: { n: 'Sleep', kind: 'ail', t: 5, noAct: 1, wake: 1, d: "Can't act. Ends after its duration or when damaged." },
-    burn: { n: 'Burn', kind: 'ail', t: 3, start: 'burn', d: '1d6 fire damage at the start of each turn.' },
-    seal: { n: 'Seal', kind: 'ail', t: 5, noCraft: 1, d: "Can't use crafts or S-Crafts." },
-    mute: { n: 'Mute', kind: 'ail', t: 5, noArts: 1, d: "Can't cast arts; a charging art is cancelled." },
-    confuse: { n: 'Confuse', kind: 'ail', t: 3, d: 'Attacks a random nearby creature, ally or enemy.' },
-    blind: { n: 'Blind', kind: 'ail', t: 5, d: 'Disadvantage on attack rolls.' },
-    cdown: { n: 'Chrono Down', kind: 'down', t: 3, fx: { spd: -2 }, d: '−2 speed.' },
-    claw: { n: 'Calamity Claw', kind: 'down', t: 3, fx: { spd: -3, mv: -3 }, d: '−3 speed and −3 squares movement.' },
-    darkm: { n: 'Dark Matter', kind: 'down', t: 3, fx: { mv: -2 }, d: '−2 squares movement.' },
-    cdrive: { n: 'Chrono Drive', kind: 'buff', t: 3, fx: { spd: 2 }, d: '+2 speed.' },
-    acup: { n: 'Crest', kind: 'buff', t: 3, fx: { ac: 2 }, d: '+2 AC (Crest / La Crest).' },
-    forte: { n: 'Forte', kind: 'buff', t: 3, d: '+1d4 weapon damage (Forte / La Forte).' },
-    saint: { n: 'Saint', kind: 'buff', t: 3, fx: { ac: 2 }, d: '+1d4 weapon damage and +2 AC.' },
-    fortuna: { n: 'Fortuna', kind: 'buff', t: 3, d: '+1d4 art damage and +2 to saves against arts.' },
-    sylphid: { n: 'Sylphid', kind: 'buff', t: 3, fx: { mv: 4 }, d: '+4 squares movement.' },
-    regen: { n: 'Regen', kind: 'buff', t: 5, start: 'regen', d: 'Regain 10% max HP at the start of each turn (Earth Pulse).' },
-    impassion: { n: 'Impassion', kind: 'buff', t: 5, start: 'cp', d: '+10 CP at the start of each turn.' },
-    amirage: { n: 'Aqua Mirage', kind: 'buff', t: 3, d: 'Weapon attacks against them have disadvantage.' },
+    sleep: { n: 'Sleep', kind: 'ail', t: 4, noAct: 1, wake: 1, d: "Can't act. Ends after its duration or when damaged." },
+    burn: { n: 'Burn', kind: 'ail', t: 2, start: 'burn', d: '1d6 fire damage at the start of each turn.' },
+    seal: { n: 'Seal', kind: 'ail', t: 4, noCraft: 1, d: "Can't use crafts or S-Crafts." },
+    mute: { n: 'Mute', kind: 'ail', t: 4, noArts: 1, d: "Can't cast arts; a charging art is cancelled." },
+    confuse: { n: 'Confuse', kind: 'ail', t: 2, d: 'Attacks a random nearby creature, ally or enemy.' },
+    blind: { n: 'Blind', kind: 'ail', t: 4, d: 'Disadvantage on attack rolls.' },
+    cdown: { n: 'Chrono Down', kind: 'down', t: 2, fx: { spd: -2 }, d: '−2 speed.' },
+    claw: { n: 'Calamity Claw', kind: 'down', t: 2, fx: { spd: -3, mv: -3 }, d: '−3 speed and −3 squares movement.' },
+    darkm: { n: 'Dark Matter', kind: 'down', t: 2, fx: { mv: -2 }, d: '−2 squares movement.' },
+    cdrive: { n: 'Chrono Drive', kind: 'buff', t: 2, fx: { spd: 2 }, d: '+2 speed.' },
+    acup: { n: 'Crest', kind: 'buff', t: 2, fx: { ac: 2 }, d: '+2 AC (Crest / La Crest).' },
+    forte: { n: 'Forte', kind: 'buff', t: 2, d: '+1d4 weapon damage (Forte / La Forte).' },
+    saint: { n: 'Saint', kind: 'buff', t: 2, fx: { ac: 2 }, d: '+1d4 weapon damage and +2 AC.' },
+    fortuna: { n: 'Fortuna', kind: 'buff', t: 2, d: '+1d4 art damage and +2 to saves against arts.' },
+    sylphid: { n: 'Sylphid', kind: 'buff', t: 2, fx: { mv: 4 }, d: '+4 squares movement.' },
+    regen: { n: 'Regen', kind: 'buff', t: 4, start: 'regen', d: 'Regain 10% max HP at the start of each turn (Earth Pulse).' },
+    impassion: { n: 'Impassion', kind: 'buff', t: 4, start: 'cp', d: '+10 CP at the start of each turn.' },
+    amirage: { n: 'Aqua Mirage', kind: 'buff', t: 2, d: 'Weapon attacks against them have disadvantage.' },
     stealth: { n: 'Stealth', kind: 'buff', t: 2, d: "Can't be targeted (Hollow Sphere)." },
     adamant: { n: 'Adamantine', kind: 'buff', t: null, d: 'Negates the next weapon attack against them.' },
     reflex: { n: 'A-Reflex', kind: 'buff', t: null, d: 'Reflects the next art back at its caster.' }
@@ -878,35 +920,40 @@ td .stlist { margin-top: 4px; }
     return fx;
   }
   const stLabel = x => STATUS[x.k].n + (x.t != null ? ' ' + x.t : '');
-  /* Default turns for a new status: ailments and stat downs shrink by the target's WIS (minimum 1). */
-  function stTurns(u, k) {
+  /* Default turns for a new status (Arts d20 › Durations). Buffs: listed + the caster's WIS. Ailments and stat downs:
+     listed + the caster's LCK − the target's WIS (minimum 1), halved on a boss (round down, minimum 1). */
+  function stTurns(u, k, from) {
     const s = STATUS[k];
     if (s.t == null) return null;
-    if (s.kind !== 'buff' && tracked(u) && u.sh) return Math.max(1, s.t - abMod(u.sh.wis));
-    return s.t;
+    const mod = (x, a) => tracked(x) && x.sh ? abMod(score(x.sh, a)) : 0;
+    if (s.kind === 'buff') return Math.max(1, s.t + (from ? mod(from, 'wis') : 0));
+    let t = Math.max(1, s.t + (from ? mod(from, 'cha') : 0) - mod(u, 'wis'));
+    if (u && u.boss) t = Math.max(1, Math.floor(t / 2));
+    return t;
   }
   const abMod = n => Math.floor((Number(n) - 10) / 2);
   /* Everything the sheet works out for you. */
   function derive(u) {
-    const sh = u.sh, m = {};
-    ABIL.forEach(a => { m[a] = abMod(sh[a]); });
+    const sh = u.sh, m = {}, tot = {};
+    ABIL.forEach(a => { tot[a] = score(sh, a); m[a] = abMod(tot[a]); });
     const prof = 2 + Math.floor((sh.lvl - 1) / 4);
     const fx = orbFx(sh.orb), sf = stFx(u), fr = frameOf(sh);
     const arm = ARMOR[sh.armor] || ARMOR.none;
     const dexAC = arm.cap == null ? m.dex : Math.min(arm.cap, m.dex);
-    const strShort = !!(arm.str && sh.str < arm.str);           // heavy armor without the STR: −2 movement
+    const strShort = !!(arm.str && tot.str < arm.str);           // heavy armor without the STR: −2 movement
     const notProf = !!(fr && arm.tier > fr.arm);
     const hpCalc = baseHP(sh);
     return {
-      mods: m, prof, fx, fr, arm, dexAC, strShort, notProf, hpCalc,
+      mods: m, tot, prof, fx, fr, arm, dexAC, strShort, notProf, hpCalc,
       hd: hitDie(sh), fspd: fr ? fr.spd : sh.fspd,
       artAtk: prof + m.int, artDC: 8 + prof + m.int, wis: m.wis,
-      crit: Math.max(2, 20 - Math.max(0, m.cha)), // CHA is luck: every positive point lowers the threshold
-      speed: (fr ? fr.spd : sh.fspd) + fx.spd + sf.spd, sf,
-      hpMax: Math.max(1, hpCalc + sh.hpAdj + fx.hp),
-      epMax: sh.orb ? orbEP(sh.orb) + fx.ep : sh.epBase,
+      crit: Math.max(2, 20 - Math.max(0, m.cha)), // LCK: every positive point lowers the threshold
+      lck: m.cha,
+      speed: Math.max(-SPEED_CAP, Math.min(SPEED_CAP, (fr ? fr.spd : sh.fspd) + fx.spd + sf.spd)), sf,
+      hpMax: Math.max(1, hpCalc + sh.hpAdj + fx.hp + gearSum(sh, 'hp')),
+      epMax: (sh.orb ? orbEP(sh.orb) + fx.ep : sh.epBase) + gearSum(sh, 'ep'),
       ac: arm.base + dexAC + fx.ac + sf.ac,
-      mv: Math.max(0, sh.mv + fx.mv + sf.mv - (strShort ? 2 : 0))
+      mv: Math.max(0, sh.mv + fx.mv + sf.mv + gearSum(sh, 'mv') - (strShort ? 2 : 0))
     };
   }
   /* Push sheet results into the live combat numbers. */
@@ -918,7 +965,7 @@ td .stlist { margin-top: 4px; }
     if (u.epMax > 0) u.ep = Math.min(u.ep, u.epMax);
   }
   /* Effective speed: from the sheet for party members, set by the GM for enemies. */
-  const spd = u => tracked(u) && u.sh ? derive(u).speed : (Number(u.speed) || 0) + stFx(u).spd;
+  const spd = u => tracked(u) && u.sh ? derive(u).speed : Math.max(-SPEED_CAP, Math.min(SPEED_CAP, (Number(u.speed) || 0) + stFx(u).spd));
   const critText = c => c >= 20 ? '20' : `${c}–20`;
   /* Apply one sheet change (from the GM, or a player's phone). Returns true if something changed. */
   function applySheet(u, k, v) {
@@ -935,7 +982,8 @@ td .stlist { margin-top: 4px; }
     if (hpEmpty && !u.ko) u.hp = u.hpMax;
     else if (u.hpMax > hpWas && !u.ko) u.hp += u.hpMax - hpWas; // gaining max HP (level up, CON) adds it to current HP too
     const label = ABIL_LABEL[k] || SHEET_LABEL[k];
-    const show = x => k === 'fspd' || k === 'hpAdj' ? fmtMod(x) : k === 'armor' ? ARMOR[x].n : k === 'hd' ? 'd' + x : (x === '' ? '—' : x);
+    const show = x => k === 'fspd' || k === 'hpAdj' ? fmtMod(x) : k === 'armor' ? ARMOR[x].n : k === 'hd' ? 'd' + x
+      : k === 'boots' ? BOOTS[x].n : (k === 'acc1' || k === 'acc2') ? ACCESSORIES[x].n : (k === 'vhS' || k === 'vdS') ? (ABIL_LABEL[x] || '—') : (x === '' ? '—' : x);
     addLog(`${u.name}'s sheet: ${label} ${show(old)} → ${show(nv)}`, null, null, true);
     return true;
   }
@@ -943,30 +991,31 @@ td .stlist { margin-top: 4px; }
   function sample() {
     const units = [
       { id: 'u1', name: 'Estelle', side: 'ally', hp: 24, ep: 30, cp: 60,
-        sh: { v: 2, lvl: 3, str: 15, dex: 14, con: 14, int: 8, wis: 12, cha: 13, frame: 'Vanguard', armor: 'heavy', mv: 6, epBase: 40,
-          crafts: [{ n: 'Wheel Smash', cp: 20, d: 12, x: 'Melee, 1d10 + STR; circle r1 around the target' }, { n: 'Swallow Strike', cp: 30, d: 10, x: 'Dash 4 squares and strike; Faint on d20 17+' }],
+        sh: { v: 3, lvl: 3, str: 13, dex: 14, con: 13, int: 8, wis: 12, cha: 13, frame: 'Vanguard', armor: 'heavy', mv: 6, epBase: 40,
+          vhA: 'Strength', vhS: 'str', vdA: 'The Sun', vdS: 'con', style: 'Bravery', wpn: 'Staff (5e: quarterstaff)', boots: 'sturdy', acc1: 'medal', acc2: 'none',
+          crafts: [{ n: 'Wheel Smash', cp: 20, d: 30, x: 'Melee, 1d10 + STR; circle r1 around the target' }, { n: 'Swallow Strike', cp: 30, d: 25, x: 'Dash 4 squares and strike; Faint on d20 17+' }],
           sc: { n: 'Phoenix Strike', x: 'Line 6, 6d10 + STR' } } },
       { id: 'u2', name: 'Goblin', side: 'enemy', speed: -1 },
       { id: 'u3', name: 'Joshua', side: 'ally', hp: 21, ep: 28, cp: 120,
-        sh: { v: 2, lvl: 3, str: 12, dex: 17, con: 12, int: 10, wis: 13, cha: 14, frame: 'Duelist', armor: 'light', mv: 7, epBase: 36,
-          crafts: [{ n: 'Double Edge', cp: 20, d: 9, x: 'Two strikes, 1d6 + DEX each' }], sc: { n: 'Black Fang', x: 'Circle r2, 5d8 + DEX' } } },
+        sh: { v: 3, lvl: 3, str: 12, dex: 17, con: 12, int: 10, wis: 13, cha: 14, frame: 'Duelist', armor: 'light', mv: 7, epBase: 36,
+          crafts: [{ n: 'Double Edge', cp: 20, d: 25, x: 'Two strikes, 1d6 + DEX each' }], sc: { n: 'Black Fang', x: 'Circle r2, 5d8 + DEX' } } },
       { id: 'u4', name: 'Kloe', side: 'ally', hp: 15, ep: 250, cp: 25,
-        sh: { v: 2, lvl: 3, str: 8, dex: 13, con: 12, int: 16, wis: 15, cha: 12, frame: 'Adept', armor: 'light', mv: 6, epBase: 80,
-          crafts: [{ n: 'Sapphire Slash', cp: 20, d: 12, x: 'Melee, 1d8 + DEX; Freeze on d20 19+' }, { n: 'Holy Song', cp: 40, d: 14, x: 'Allies in circle r3 heal 2d8 + WIS' }],
+        sh: { v: 3, lvl: 3, str: 8, dex: 13, con: 12, int: 16, wis: 15, cha: 12, frame: 'Adept', armor: 'light', mv: 6, epBase: 80,
+          crafts: [{ n: 'Sapphire Slash', cp: 20, d: 30, x: 'Melee, 1d8 + DEX; Freeze on d20 19+' }, { n: 'Holy Song', cp: 40, d: 35, x: 'Allies in circle r3 heal 2d8 + WIS' }],
           sc: { n: 'Ray of Hope', x: 'All allies heal fully' },
           orb: { lay: '4+2', man: false, c: { o: true, l: null, q: { k: 'hp1' } },
             L: [[{ o: true, l: 'water', q: { k: 'freeze1' } }, { o: true, l: null, q: { k: 'mind1' } }, { o: true, l: null, q: { k: 'epcut1' } }, { o: false, l: null, q: null }],
                 [{ o: true, l: null, q: { k: 'attack1' } }, { o: false, l: 'fire', q: null }]] } } },
       { id: 'u5', name: 'Schera', side: 'ally', hp: 17, ep: 55, cp: 200,
-        sh: { v: 2, lvl: 3, str: 10, dex: 16, con: 13, int: 14, wis: 10, cha: 16, frame: 'Phantom', armor: 'lightr', mv: 6, epBase: 64,
-          crafts: [{ n: 'Fire Whip', cp: 20, d: 11, x: 'Reach 3, 1d8 + DEX; Burn on d20 17+' }], sc: { n: 'Valkyrie Dance', x: 'Circle r2, 5d8 + DEX' } } },
+        sh: { v: 3, lvl: 3, str: 10, dex: 16, con: 13, int: 14, wis: 10, cha: 16, frame: 'Phantom', armor: 'lightr', mv: 6, epBase: 64,
+          crafts: [{ n: 'Fire Whip', cp: 20, d: 30, x: 'Reach 3, 1d8 + DEX; Burn on d20 17+' }], sc: { n: 'Valkyrie Dance', x: 'Circle r2, 5d8 + DEX' } } },
       { id: 'u6', name: 'Knight', side: 'enemy', speed: -2 }
     ];
-    const ticks = [0, 3, 5, 7, 9, 11];
+    const ticks = [0, 9, 15, 21, 27, 33];
     const entries = units.map((u, i) => ({ unitId: u.id, tick: ticks[i], seq: i + 1, kind: 'turn' }));
-    Object.assign(entries[3], { kind: 'cast', art: 'Fire Bolt', after: 8 });
+    Object.assign(entries[3], { kind: 'cast', art: 'Fire Bolt', after: 15 });
     return {
-      units, entries, now: 0, slot: 0, seqN: 10, idN: 7, seed: 20261015,
+      units, entries, now: 0, slot: 0, seqN: 10, idN: 7, seed: 20261015, scale: 'zero',
       overrides: { 0: 'none', 1: 'crit', 2: 'none', 3: 'none', 4: 'hp10', 5: 'none' },
       costs: Object.assign({}, DEF_COSTS),
       settings: Object.assign({}, DEF_SETTINGS),
@@ -978,6 +1027,17 @@ td .stlist { margin-top: 4px; }
   }
   function normalize(s) {
     if (!s || !Array.isArray(s.units)) s = sample();
+    if (s.scale !== 'zero') {
+      // Tables from before the Zero AT scale: default delays become Zero's, custom ones and the timeline are tripled.
+      const c = Object.assign({}, OLD_COSTS, s.costs);
+      const isOld = Object.keys(OLD_COSTS).every(k => Number(c[k]) === OLD_COSTS[k]);
+      s.costs = isOld ? Object.assign({}, DEF_COSTS) : Object.fromEntries(Object.keys(DEF_COSTS).map(k => [k, Math.round((Number(c[k]) || OLD_COSTS[k]) * 3)]));
+      (s.entries || []).forEach(e => { e.tick = r1((Number(e.tick) || 0) * 3); if (e.after != null) e.after = Math.round(e.after * 3); });
+      s.now = r1((Number(s.now) || 0) * 3);
+      if (s.pending) s.pending = null;
+      if (s.settings && Number(s.settings.step) === 3) s.settings.step = 10;
+      s.scale = 'zero';
+    }
     s.costs = Object.assign({}, DEF_COSTS, s.costs);
     s.settings = Object.assign({}, DEF_SETTINGS, s.settings);
     s.gains = Object.assign({}, DEF_GAINS, s.gains);
@@ -1050,11 +1110,19 @@ td .stlist { margin-top: 4px; }
   function knockOut(u) { u.ko = true; u.st = []; addLog(`${u.name} is knocked out`); }
 
   /* ---------- status effects in play ---------- */
-  function addStatus(u, k, turns) {
+  /* Why this unit can't get this status (bosses, ward charms), or ''. */
+  function immune(u, k) {
+    if (u.boss && k === 'petrify') return 'bosses are immune to Petrify';
+    if (tracked(u) && u.sh && [u.sh.acc1, u.sh.acc2].includes('ward_' + k)) return `their ward charm blocks ${STATUS[k].n}`;
+    return '';
+  }
+  function addStatus(u, k, turns, from) {
     const s = STATUS[k]; if (!u || !s) return false;
+    const why = immune(u, k);
+    if (why) { addLog(`${u.name} is immune to ${s.n}: ${why}`); return true; }
     if (!Array.isArray(u.st)) u.st = [];
     const n = Math.round(Number(turns));
-    const t = turns === '' || turns == null || !isFinite(n) ? stTurns(u, k) : Math.max(1, Math.min(99, n));
+    const t = turns === '' || turns == null || !isFinite(n) ? stTurns(u, k, from) : Math.max(1, Math.min(99, n));
     const front = queue()[0];
     const x = { k, t };
     if (front && front.unitId === u.id && front.kind !== 'cast') x.fresh = true; // put on during their own turn: that turn doesn't count
@@ -1137,7 +1205,7 @@ td .stlist { margin-top: 4px; }
       if (JSON.stringify(q) === JSON.stringify(slot.q)) return false;
       const qi = qInfo(q);
       if (qi && slot.l && qi.el !== slot.l) return false; // element-locked slot
-      if (qi && (qi.k === 'action1' || qi.k === 'cast') && placed(o).some(x => x.k === qi.k) && !(slot.q && slot.q.k === qi.k)) return false;
+      if (qi && qi.k === 'action1' && placed(o).some(x => x.k === qi.k) && !(slot.q && slot.q.k === qi.k)) return false;
       const old = qInfo(slot.q);
       slot.q = q; syncSheet(u);
       lg(qi ? `${qi.n} (${ELEM_LABEL[qi.el]} ${qi.v}) into the ${where}` : `${old ? old.n : 'quartz'} removed from the ${where}`);
@@ -1344,6 +1412,9 @@ td .stlist { margin-top: 4px; }
     } else if (cmd === 'impede') {
       if (e.kind === 'cast') { addLog(`${u.name}'s ${e.art} is impeded`); e.kind = 'turn'; delete e.art; delete e.after; }
       if (S.pending && S.pending.unitId === id) S.pending = null;
+    } else if (cmd === 'boss') {
+      u.boss = !u.boss;
+      addLog(u.boss ? `${u.name} is a boss: ailments and stat downs on them are halved; immune to Petrify and K.O.` : `${u.name} is no longer a boss`);
     } else if (cmd === 'ko') {
       u.ko = !u.ko;
       if (u.ko) u.st = [];
@@ -1375,6 +1446,7 @@ td .stlist { margin-top: 4px; }
       e.seq = ++S.seqN; e.kind = 'turn'; delete e.art; delete e.after; e.sbreak = false;
     });
     S.log = []; addLog('A new battle begins.');
+    S.units.filter(u => tracked(u) && u.sh && gearSum(u.sh, 'cp')).forEach(u => { const n = bump(u, 'cp', gearSum(u.sh, 'cp')); if (n) addLog(`${u.name} starts with +${n} CP (Fighter's medal) → ${u.cp} CP`); });
     commit();
   }
 
@@ -1437,7 +1509,7 @@ td .stlist { margin-top: 4px; }
         <span class="ico">${iconFor(e.kind, u)}</span>
         <span class="nm">${esc(cast ? e.art : u.name)}</span>
         ${cast ? `<span class="sub">${esc(u.name)} casting</span>` : ''}
-        ${e.sbreak ? '<span class="tag">S-BREAK</span>' : ''}
+        ${e.sbreak ? '<span class="tag">S-BREAK</span>' : ''}${u.boss ? '<span class="tag">BOSS</span>' : ''}
         ${stChips(u, false, 2)}
         ${chipHtml(b)}
       </div>`;
@@ -1567,6 +1639,7 @@ td .stlist { margin-top: 4px; }
           <button class="btn small" data-r="delay" data-id="${u.id}" title="Delay by the delay step" ${u.ko ? 'disabled' : ''}>+</button>
           <button class="btn small gold" data-r="sbreak" data-id="${u.id}" title="${esc(sBlock(u) ? sBlock(u).msg : 'S-Break: take the current turn now')}" ${u.ko || sBlock(u) ? 'disabled' : ''}>S-Break</button>
           ${e.kind === 'cast' && !u.ko ? `<button class="btn small" data-r="impede" data-id="${u.id}" title="Cancel the art being cast">Impede</button>` : ''}
+          ${tracked(u) ? '' : `<button class="btn small ${u.boss ? 'gold' : ''}" data-r="boss" data-id="${u.id}" title="Bosses halve ailments and stat downs on them and are immune to Petrify and K.O.">${u.boss ? 'Boss ✓' : 'Boss'}</button>`}
           <button class="btn small" data-r="ko" data-id="${u.id}">${u.ko ? 'Revive' : 'KO'}</button>
           <button class="btn small warn" data-r="remove" data-id="${u.id}" title="Remove from battle" aria-label="Remove ${esc(u.name)}">✕</button>
         </div></td></tr>`;
@@ -1581,19 +1654,25 @@ td .stlist { margin-top: 4px; }
     const who = $('st-who'), sk = $('st-k');
     if (!who || who.contains(document.activeElement) || sk.contains(document.activeElement)) return;
     const live = S.units.filter(u => !u.ko);
-    const keep = who.value;
+    const keep = who.value, from = $('st-from'), keepF = from.value;
     who.innerHTML = live.map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join('');
     if (live.some(u => u.id === keep)) who.value = keep;
+    from.innerHTML = '<option value="">—</option>' + S.units.map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join('');
+    if (S.units.some(u => u.id === keepF)) from.value = keepF;
     if (!sk.options.length) sk.innerHTML = Object.keys(ST_KIND).map(kd => `<optgroup label="${ST_KIND[kd]}">${Object.keys(STATUS).filter(k => STATUS[k].kind === kd).map(k => `<option value="${k}">${STATUS[k].n}</option>`).join('')}</optgroup>`).join('');
     stHint();
   }
   /* Show the default turns for this status on this target. */
   function stHint() {
-    const u = U($('st-who').value), k = $('st-k').value, s = STATUS[k];
+    const u = U($('st-who').value), k = $('st-k').value, s = STATUS[k], from = U($('st-from').value);
     if (!u || !s) return;
-    const t = stTurns(u, k);
+    const t = stTurns(u, k, from);
     $('st-t').placeholder = t == null ? 'until cured' : String(t);
-    $('st-help').textContent = `${s.n}: ${s.d}` + (t == null ? ' Lasts until cured or used.' : s.kind !== 'buff' && tracked(u) && u.sh && abMod(u.sh.wis) ? ` ${t} turns after ${u.name}'s WIS.` : s.kind === 'buff' ? ' Add the caster\'s WIS modifier to the turns.' : '') + ' Leave Turns empty for the default.';
+    const how = t == null ? ' Lasts until cured or used.'
+      : s.kind === 'buff' ? ` ${s.t} turns${from ? ` + ${from.name}'s WIS` : ''} = ${t}.`
+      : ` ${s.t} turns${from ? ` + ${from.name}'s LCK` : ''}${tracked(u) ? ` − ${u.name}'s WIS` : ''}${u.boss ? ', halved for a boss' : ''} = ${t} (minimum 1).`;
+    const imm = immune(u, k);
+    $('st-help').textContent = `${s.n}: ${s.d}${how}${imm ? ` ${u.name} is immune: ${imm}.` : ''} Leave Turns empty for the default.`;
   }
   function renderSettings() {
     const st = S.settings;
@@ -1689,14 +1768,16 @@ td .stlist { margin-top: 4px; }
     const sh = u.sh, d = derive(u), fr = d.fr;
     const num = (k, extra) => `<input type="number" id="${pre}-${k}" value="${sh[k]}" min="${SHEET_FIELDS[k][0]}" max="${SHEET_FIELDS[k][1]}" data-sh="${k}" data-id="${u.id}" inputmode="numeric" ${extra || ''}>`;
     const sel = (k, opts) => `<select id="${pre}-${k}" data-sh="${k}" data-id="${u.id}">${opts.map(([v, l]) => `<option value="${v}" ${String(sh[k]) === String(v) ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
-    const abil = ABIL.map(a => `<label class="ab"><span class="abk">${ABIL_LABEL[a]}</span>${num(a)}<span class="abm num" id="${pre}-m-${a}">${fmtSigned(d.mods[a])}</span></label>`).join('');
+    const abil = ABIL.map(a => `<label class="ab"><span class="abk">${ABIL_LABEL[a]}</span>${num(a)}<span class="abm num" id="${pre}-m-${a}">${abText(d, sh, a)}</span></label>`).join('');
+    const abOpts = [['', '—']].concat(ABIL.map(a => [a, ABIL_LABEL[a]]));
+    const arcOpts = [['', 'Pick an arcana…']].concat(ARCANA.map(a => [a, a]));
     const frameOpts = Object.keys(FRAMES).map(f => [f, `${f} · d${FRAMES[f].hd} · speed ${fmtMod(FRAMES[f].spd)} · ${FRAMES[f].feel}`]).concat([['Custom', 'Custom…']]);
     const curFrame = fr ? sh.frame : 'Custom';
     const frameSel = `<select id="${pre}-framesel" data-sh="frame" data-id="${u.id}">${frameOpts.map(([v, l]) => `<option value="${v}" ${curFrame === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
     const crafts = sh.crafts.map((c, i) => `<div class="craft">
         <input type="text" id="${pre}-cr-${i}-n" value="${esc(c.n)}" maxlength="40" data-cr="n" data-i="${i}" data-id="${u.id}" placeholder="Craft name" aria-label="Craft name" autocomplete="off">
         <label>CP <input type="number" id="${pre}-cr-${i}-cp" value="${c.cp}" min="0" max="200" data-cr="cp" data-i="${i}" data-id="${u.id}"></label>
-        <label>Delay <input type="number" id="${pre}-cr-${i}-d" value="${c.d}" min="1" max="30" data-cr="d" data-i="${i}" data-id="${u.id}"></label>
+        <label title="25 buff · 30 standard · 35 strong">Delay <input type="number" id="${pre}-cr-${i}-d" value="${c.d}" min="1" max="60" data-cr="d" data-i="${i}" data-id="${u.id}"></label>
         <input type="text" class="cx" id="${pre}-cr-${i}-x" value="${esc(c.x)}" maxlength="120" data-cr="x" data-i="${i}" data-id="${u.id}" placeholder="Range, damage, effect" aria-label="Craft effect" autocomplete="off">
         <button type="button" class="btn small ghost" data-crdel="${i}" data-id="${u.id}" aria-label="Remove ${esc(c.n || 'craft')}">✕</button>
       </div>`).join('');
@@ -1711,12 +1792,27 @@ td .stlist { margin-top: 4px; }
         <label>Hit die ${sel('hd', [6, 8, 10, 12].map(v => [v, 'd' + v]))}</label>
         <label>Frame speed ${sel('fspd', [-1, 0, 1].map(v => [v, fmtMod(v)]))}</label>
       </div>`}
-      <div class="abil">${abil}</div>
       <div class="shrow">
-        <label class="grow">Armor ${sel('armor', Object.keys(ARMOR).map(k => [k, `${ARMOR[k].n} · ${ARMOR[k].base}${ARMOR[k].cap === 0 ? '' : ARMOR[k].cap ? ' + DEX (max 2)' : ' + DEX'}`]))}</label>
-        <label title="Rolled HP, feats, perks, accessories like a Vigor ring">Bonus HP ${num('hpAdj')}</label>
+        <label class="grow">History vantage ${sel('vhA', arcOpts)}</label><label>+2 to ${sel('vhS', abOpts)}</label>
+        <label class="grow">Destiny vantage ${sel('vdA', arcOpts)}</label><label>+1 to ${sel('vdS', abOpts)}</label>
+      </div>
+      <div class="abil">${abil}</div>
+      <p class="frameinfo">Type base scores; Vantage bonuses are added on top. LCK replaces CHA (Persuasion, Deception, Performance; Intimidation uses STR).</p>
+      <div class="shrow">
+        <label class="grow">Fighting style ${sel('style', [['', '—']].concat(STYLES.map(x => [x, x])))}</label>
+        <label title="Rolled HP, feats, perks">Bonus HP ${num('hpAdj')}</label>
         ${sh.orb ? '' : `<label>Max EP ${num('epBase')}</label>`}
         <label>Movement ${num('mv')}</label>
+      </div>
+      <h3>Gear</h3>
+      <div class="shrow">
+        <label class="grow">Weapon <input type="text" id="${pre}-wpn" value="${esc(sh.wpn)}" maxlength="40" data-sh="wpn" data-id="${u.id}" placeholder="e.g. Tonfa (5e: club)" autocomplete="off"></label>
+        <label class="grow">Armor ${sel('armor', Object.keys(ARMOR).map(k => [k, `${ARMOR[k].n} · ${ARMOR[k].base}${ARMOR[k].cap === 0 ? '' : ARMOR[k].cap ? ' + DEX (max 2)' : ' + DEX'}`]))}</label>
+      </div>
+      <div class="shrow">
+        <label class="grow">Boots ${sel('boots', Object.keys(BOOTS).map(k => [k, `${BOOTS[k].n} · ${BOOTS[k].b}`]))}</label>
+        <label class="grow">Accessory ${sel('acc1', Object.keys(ACCESSORIES).map(k => [k, ACCESSORIES[k].n]))}</label>
+        <label class="grow">Accessory ${sel('acc2', Object.keys(ACCESSORIES).map(k => [k, ACCESSORIES[k].n]))}</label>
       </div>
       <div class="derived" id="${pre}-der">${derivedHtml(u)}</div>
       <div class="crafts"><h3>Crafts</h3>${crafts || '<p class="muted">No crafts yet.</p>'}
@@ -1729,6 +1825,8 @@ td .stlist { margin-top: 4px; }
       </div>
     </div>`;
   }
+  /* An ability box's footer: the modifier, plus the total when a Vantage adds to it. */
+  function abText(d, sh, a) { return d.tot[a] !== sh[a] ? `${d.tot[a]} · ${fmtSigned(d.mods[a])}` : fmtSigned(d.mods[a]); }
   function derivedHtml(u) {
     const d = derive(u), sh = u.sh;
     const c = (k, v, t, cls) => `<span class="dchip ${cls || ''}" ${t ? `title="${esc(t)}"` : ''}><span class="k">${k}</span><b>${v}</b></span>`;
@@ -1746,7 +1844,9 @@ td .stlist { margin-top: 4px; }
       c('Heals & revives', fmtSigned(d.wis), 'Add your WIS modifier to heals and revives'),
       c('Buff turns', fmtSigned(d.wis), 'Your buffs last their listed turns + WIS'),
       c('Ailments on you', fmtSigned(-d.wis) + ' turns', 'Ailments and stat downs last their listed turns − your WIS (minimum 1)'),
-      c('Weapon crit', critText(d.crit) + ' · ×1.5', 'Crit on 20 − your CHA modifier (if positive). Weapon crits deal 1.5× damage.'),
+      c('Weapon crit', critText(d.crit) + ' · ×1.5', 'Crit on 20 − your LCK modifier (if positive). Weapon crits deal 1.5× damage.'),
+      c('Ailment rolls', fmtSigned(d.lck), 'Add LCK to the d20 when your art or quartz tries to inflict a status (+5% a point)'),
+      c('Ailments you inflict', fmtSigned(d.lck) + ' turns', 'Ailments and stat downs you inflict last their listed turns + your LCK'),
       c('Speed', fmtMod(d.speed), d.fx.spd ? 'Includes +1 from Action quartz' : ''),
       c('Move', d.mv + ' sq', d.strShort ? `−2 for ${d.arm.n} without STR ${d.arm.str}` : ''),
       d.notProf ? c('Armor', `not proficient (${sh.frame}: ${ARM_TIER[d.fr.arm]})`, '5e: disadvantage on STR and DEX checks, saves and attack rolls', 'warn') : '',
@@ -1756,10 +1856,12 @@ td .stlist { margin-top: 4px; }
       d.fx.wdmg ? c('Weapon damage', `+${d.fx.wdmg} (quartz)`) : '',
       d.fx.adm ? c('Art damage', `+${d.fx.adm} (quartz)`) : '',
       d.fx.epcut ? c('Art EP cost', `−${d.fx.epcut * EPCUT_PCT}% (quartz)`) : '',
-      d.fx.castcut ? c('Art cast time', `−${CAST_PCT}% (Cast quartz)`) : '',
+      d.fx.castcut ? c('Art cast time', `−${d.fx.castcut * CAST_PCT}% (quartz)`) : '',
+      d.fx.dr ? c('Weapon damage taken', `−${d.fx.dr} (quartz)`) : '',
       d.fx.dexSave ? c('DEX saves', `+${d.fx.dexSave} (quartz)`) : '',
       d.fx.asave ? c('Saves vs arts', `+${d.fx.asave} (quartz)`) : '',
-      d.fx.onHit.length ? c('Weapon hit on 20', d.fx.onHit.join(', ')) : ''
+      d.fx.onHit.length ? c('Weapon hit on 20', d.fx.onHit.join(', ')) : '',
+      ...gear(sh).filter(g => g.b && g.b !== 'No bonus').map(g => c(g.n, g.b))
     ].join('');
   }
   /* Rebuild a sheet unless someone is typing in it; the worked-out numbers always refresh. */
@@ -1769,7 +1871,7 @@ td .stlist { margin-top: 4px; }
     if (el.dataset.key !== key || !typing) { el.innerHTML = sheetHtml(u, pre); el.dataset.key = key; return; }
     const der = $(pre + '-der'); if (der) der.innerHTML = derivedHtml(u);
     const d = derive(u);
-    ABIL.forEach(a => { const m = $(`${pre}-m-${a}`); if (m) m.textContent = fmtSigned(d.mods[a]); });
+    ABIL.forEach(a => { const m = $(`${pre}-m-${a}`); if (m) m.textContent = abText(d, u.sh, a); });
   }
   /* ---------- orbment builder (GM panel and phones share this) ---------- */
   let orbSel = null; // { id, li, si }: the slot whose picker is open on this screen
@@ -1799,7 +1901,7 @@ td .stlist { margin-top: 4px; }
         <label>Element lock <select data-oop="lock">${['', ...ELEM].map(e => `<option value="${e}" ${s.l === (e || null) ? 'selected' : ''}>${e ? ELEM_LABEL[e] + ' only' : 'Any element'}</option>`).join('')}</select></label>
       </div>`;
     if (!s.o) return h + `<p class="muted">${gm ? 'Unlock this slot to put quartz in it.' : 'This slot is locked. The GM unlocks slots with sepith.'}</p></div>`;
-    const taken = k => (k === 'action1' || k === 'cast') && placed(o).some(x => x.k === k) && !(s.q && s.q.k === k);
+    const taken = k => k === 'action1' && placed(o).some(x => x.k === k) && !(s.q && s.q.k === k);
     const opts = Object.keys(STARTERS).filter(k => !s.l || STARTERS[k].el === s.l).map(k => {
       const q = STARTERS[k], off = taken(k);
       return `<option value="${k}" ${s.q && s.q.k === k ? 'selected' : ''} ${off ? 'disabled' : ''}>${q.n} · ${ELEM_LABEL[q.el]} ${q.v || 1} · ${q.b}${off ? ' (one per orbment)' : ''}</option>`;
@@ -2765,7 +2867,7 @@ td .stlist { margin-top: 4px; }
     if (ev.target.id === 'stForm') {
       const u = U($('st-who').value); if (!u) return;
       snapshot();
-      if (addStatus(u, $('st-k').value, $('st-t').value)) { $('st-t').value = ''; keepPendingValid(); commit(); } else undoStack.pop();
+      if (addStatus(u, $('st-k').value, $('st-t').value, U($('st-from').value))) { $('st-t').value = ''; keepPendingValid(); commit(); } else undoStack.pop();
       return;
     }
     if (ev.target.id === 'addForm') {
@@ -2893,7 +2995,7 @@ td .stlist { margin-top: 4px; }
       Object.assign(S.pending, { name: c.n, cp: c.cp, base: c.d });
       return commit();
     }
-    if (t.id === 'st-who' || t.id === 'st-k') return stHint();
+    if (t.id === 'st-who' || t.id === 'st-k' || t.id === 'st-from') return stHint();
     if (t.id === 'mira') {
       const v = Math.max(0, Math.round(Number(t.value) || 0));
       snapshot();
