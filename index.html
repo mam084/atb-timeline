@@ -344,6 +344,30 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
 .pickrow .an .num { margin-left: auto; color: var(--blue); font-size: .82rem; }
 .pickrow .ad { font-size: .8rem; color: var(--muted); }
 
+.ehp { display: flex; align-items: center; gap: 3px; }
+.ehp input[type="number"] { width: 3.8em; padding: 4px 5px; }
+.ehpbar { display: block; height: 5px; margin-top: 4px; width: 8.2em; }
+.ehit { display: flex; gap: 3px; margin-top: 4px; }
+.ehit input { width: 3.8em; padding: 3px 5px; }
+#roster { min-width: 820px; }
+#roster td:nth-child(2) { min-width: 12em; width: 30%; }
+#roster td:nth-child(2) .nameinput { width: 100%; }
+.enote { font-size: .74rem; color: var(--muted); margin-top: 3px; line-height: 1.3; }
+.slot .slotbar { width: 70%; height: 4px; }
+
+/* Quartz search */
+.qnow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .9rem; }
+.qsearch { width: 100%; font-size: 1rem; }
+.qlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; max-height: 320px; overflow-y: auto; }
+.qlist .qnone { grid-column: 1 / -1; }
+.qrow { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); }
+.qrow:hover { border-color: var(--accent); }
+.qrow.on { border-color: var(--accent); background: var(--accent-tint); }
+.qrow:disabled { opacity: .45; }
+.qrow .qn { display: flex; align-items: center; gap: 4px; }
+.qrow .qn .num { margin-left: auto; font-size: .78rem; color: var(--muted); }
+.qrow .qb { font-size: .8rem; color: var(--muted); }
+
 /* Orbment */
 .el-earth { --el: #d0a25a; } .el-water { --el: #5ea6ec; } .el-fire { --el: #f06c6c; } .el-wind { --el: #5cc480; }
 .el-time { --el: #a78bfa; } .el-space { --el: #e3b94e; } .el-mirage { --el: #c3ccd1; }
@@ -517,8 +541,13 @@ td .stlist { margin-top: 4px; }
           <select id="add-side"><option value="ally">Party</option><option value="enemy">Enemy</option></select>
         </label>
         <label title="+ is faster. For party members this sets their frame speed (−1 to +1).">Speed <input type="number" id="add-mod" value="0" step="1" min="-9" max="9"></label>
+        <label title="Enemies only; party HP comes from the sheet">HP <input type="number" id="add-hp" min="0" placeholder="—"></label>
         <label class="inline"><input type="checkbox" id="add-now"> Act next</label>
         <button class="btn" type="submit">Add</button>
+      </form>
+      <form class="addrow" id="encForm">
+        <label class="grow">Test encounter <select id="enc-pick"></select></label>
+        <button class="btn" type="submit">Add enemies</button>
       </form>
       <form class="addrow" id="stForm">
         <label>Status for <select id="st-who"></select></label>
@@ -624,6 +653,22 @@ td .stlist { margin-top: 4px; }
   const OLD_COSTS = { attack: 10, craft: 12, castTime: 6, afterCast: 8, item: 8, move: 6, defend: 8, scraft: 16 }; // before the Zero scale
   const DEF_SETTINGS = { show: 12, rate: 30, numbers: false, step: 10, mode: 'rate', pct: 10 };
   const SPEED_CAP = 3; // speed from all sources caps at ±3
+  /* Test encounters for 3 level-3 PCs (also in the rules doc's Test Encounters tab). n = how many. */
+  const ENCOUNTERS = {
+    alley: { n: 'Back-Alley Shakedown (easy · basics)', foes: [
+      { name: 'Thug', n: 3, hp: 13, speed: 0, note: 'AC 12 · Club +4, 1d6+2 · Cheap Shot (craft, delay 30, every other turn): +4, 1d6+2, Faint on d20 19+' },
+      { name: 'Thug Boss', n: 1, hp: 30, speed: 0, note: 'AC 14 · Knuckles +5, 1d8+3 · Rally (craft, delay 25, once): allies in r3 get Forte, 2 turns · flees at 10 HP' } ] },
+    geofront: { n: 'Geofront Vermin (medium · statuses & areas)', foes: [
+      { name: 'Ember Slime', n: 2, hp: 18, speed: -1, note: 'AC 11 · Pseudopod +3, 1d6+1 fire, Burn on d20 17+ · on death bursts: r1, DEX DC 11, 1d6' },
+      { name: 'Needle Bat', n: 2, hp: 9, speed: 1, note: 'AC 13 · flies, move 8 · Needle +4, 1d4+2, Seal on d20 19+' },
+      { name: 'Stone Carapace', n: 1, hp: 30, speed: -2, note: 'AC 16 · Slam +4, 1d10+2 · casts Crest on itself (cast 10, rec. 25): +2 AC, 2 turns' } ] },
+    security: { n: 'Orbal Security Sweep (medium–hard · casting & Impede)', foes: [
+      { name: 'Sentry Drone', n: 2, hp: 16, speed: 0, note: 'AC 14 · Stun Shot (range 12) +4, 1d6+2 · casts Sparkle (cast 15, rec. 15): +4, 2d6, Seal on d20 19+' },
+      { name: 'Guard Mech', n: 1, hp: 42, speed: -1, note: 'AC 16 · Arm Slam +5, 1d10+3 · Charge Cannon (charges like an art: cast 30, rec. 15): line 12 × 3, DEX DC 13, 4d6, half on save' } ] },
+    enforcer: { n: 'Almata Enforcer (hard · boss & S-Craft)', foes: [
+      { name: 'Enforcer', n: 1, hp: 70, speed: 1, boss: true, note: 'BOSS · AC 15 · Blade +6, 2d6+3 · Shadow Step (25): teleport 6 + Blade · Crimson Fan (30): r2, DEX DC 14, 3d8, Burn 17+ · S-Craft once at ≤35 HP: r3, DEX DC 14, 5d8, half on save' },
+      { name: 'Almata Grunt', n: 2, hp: 16, speed: 0, note: 'AC 13 · Pistol (range 10) +4, 1d8+2 · Cover Fire (craft, 30): target has disadvantage on its next attack' } ] }
+  };
   /* CP rules (see the rulebook): CP caps at 200. An S-Craft needs 100 and spends 100; at 200 it can be
      empowered and spends all 200. A character needs a regular turn between S-Crafts. */
   const CP_CAP = 200, S_MIN = 100;
@@ -1424,7 +1469,7 @@ td .stlist { margin-top: 4px; }
         const base = nf ? nf.tick : S.now;
         if (e.tick < base) { e.tick = r1(base + delay(S.costs.attack, spd(u))); e.seq = ++S.seqN; }
         e.kind = 'turn'; delete e.art; e.sbreak = false;
-        if (tracked(u) && u.hpMax > 0 && u.hp === 0) u.hp = 1;
+        if (u.hpMax > 0 && !(u.hp > 0)) u.hp = 1;
       }
       addLog(u.ko ? `${u.name} is knocked out` : `${u.name} is back in the fight`);
     } else if (cmd === 'remove') {
@@ -1511,6 +1556,7 @@ td .stlist { margin-top: 4px; }
         <span class="nm">${esc(cast ? e.art : u.name)}</span>
         ${cast ? `<span class="sub">${esc(u.name)} casting</span>` : ''}
         ${e.sbreak ? '<span class="tag">S-BREAK</span>' : ''}${u.boss ? '<span class="tag">BOSS</span>' : ''}
+        ${!present && !tracked(u) && u.hpMax ? `<span class="bar hp slotbar ${u.hp <= u.hpMax * .25 ? 'low' : ''}" title="${u.hp}/${u.hpMax} HP"><i style="width:${Math.max(0, Math.min(100, u.hp / u.hpMax * 100))}%"></i></span>` : ''}
         ${stChips(u, false, 2)}
         ${chipHtml(b)}
       </div>`;
@@ -1632,8 +1678,9 @@ td .stlist { margin-top: 4px; }
       if (!u.ko && e.kind === 'cast') status += ` <span class="castlbl">· ${esc(e.art)}</span>`;
       return `<tr class="${u.ko ? 'ko' : ''} ${isCur ? 'current' : ''}">
         <td><span class="sideicon ${u.side}" title="${u.side === 'ally' ? 'Party' : 'Enemy'}">${u.side === 'ally' ? ICON.shield : ICON.swords}</span></td>
-        <td><input class="nameinput" type="text" id="name-${u.id}" value="${esc(u.name)}" data-uf="name" data-id="${u.id}" aria-label="Name">${stChips(u, true)}</td>
+        <td><input class="nameinput" type="text" id="name-${u.id}" value="${esc(u.name)}" data-uf="name" data-id="${u.id}" aria-label="Name">${u.note ? `<div class="enote">${esc(u.note)}</div>` : ''}${stChips(u, true)}</td>
         <td>${tracked(u) ? `<span class="num" title="Set on ${esc(u.name)}'s sheet">${fmtMod(spd(u))}</span>` : `<input type="number" id="spd-${u.id}" value="${u.speed}" min="-9" max="9" step="1" data-uf="speed" data-id="${u.id}" aria-label="Speed">${stFx(u).spd ? ` <span class="num" title="With statuses">→ ${fmtMod(spd(u))}</span>` : ''}`}</td>
+        <td>${hpCell(u)}</td>
         <td class="status">${status}</td>
         <td><div class="rowbtns">
           <button class="btn small" data-r="hasten" data-id="${u.id}" title="Hasten by the delay step" ${u.ko || isCur ? 'disabled' : ''}>−</button>
@@ -1647,8 +1694,33 @@ td .stlist { margin-top: 4px; }
     }).join('');
     renderStForm();
     document.getElementById('roster').innerHTML =
-      `<thead><tr><th></th><th>Name</th><th title="Speed: + is faster">Speed</th><th>Next</th><th>Controls</th></tr></thead><tbody>${rows ||
-      '<tr><td colspan="5" class="muted">No combatants yet.</td></tr>'}</tbody>`;
+      `<thead><tr><th></th><th>Name</th><th title="Speed: + is faster">Speed</th><th title="Enemy HP is only shown to you">HP</th><th>Next</th><th>Controls</th></tr></thead><tbody>${rows ||
+      '<tr><td colspan="6" class="muted">No combatants yet.</td></tr>'}</tbody>`;
+  }
+  /* HP in the roster: party members show their numbers (edit them on the party cards); enemies get a simple tracker. */
+  function hpCell(u) {
+    if (tracked(u)) return `<span class="num muted">${u.hp}/${u.hpMax}</span>`;
+    const max = Number(u.hpMax) || 0, hp = Number(u.hp) || 0;
+    const w = max ? Math.max(0, Math.min(100, hp / max * 100)) : 0;
+    return `<div class="ehp"><input type="number" id="ehp-${u.id}" value="${max ? hp : ''}" min="0" data-uf="ehp" data-id="${u.id}" aria-label="${esc(u.name)} HP" placeholder="—">
+      <span class="muted">/</span><input type="number" id="ehpmax-${u.id}" value="${max || ''}" min="0" data-uf="ehpMax" data-id="${u.id}" aria-label="${esc(u.name)} max HP" placeholder="max"></div>
+      ${max ? `<span class="bar hp ${hp <= max * .25 ? 'low' : ''} ehpbar"><i style="width:${w}%"></i></span>` : ''}
+      <form class="ehit" data-ehit="${u.id}"><input type="number" min="1" placeholder="dmg" aria-label="Damage to ${esc(u.name)}"><button class="btn small warn" type="submit" title="Subtract this much HP">Hit</button></form>`;
+  }
+  /* Change an enemy's HP; at 0 they're knocked out. */
+  function enemyHP(u, v, why) {
+    const max = Number(u.hpMax) || 0;
+    const before = Number(u.hp) || 0;
+    const nv = Math.max(0, max ? Math.min(max, Math.round(v)) : Math.round(v));
+    if (nv === before) return false;
+    u.hp = nv;
+    addLog(`${u.name} ${nv < before ? `takes ${before - nv} damage` : `recovers ${nv - before} HP`}${why ? ' ' + why : ''} → HP ${nv}${max ? '/' + max : ''}`, null, null, true);
+    if (nv === 0 && max && !u.ko) {
+      u.ko = true; u.st = [];
+      addLog(`${u.name} is defeated`);
+      keepPendingValid();
+    }
+    return true;
   }
 
   function renderStForm() {
@@ -1903,12 +1975,17 @@ td .stlist { margin-top: 4px; }
       </div>`;
     if (!s.o) return h + `<p class="muted">${gm ? 'Unlock this slot to put quartz in it.' : 'This slot is locked. The GM unlocks slots with sepith.'}</p></div>`;
     const taken = k => k === 'action1' && placed(o).some(x => x.k === k) && !(s.q && s.q.k === k);
-    const opts = Object.keys(STARTERS).filter(k => !s.l || STARTERS[k].el === s.l).map(k => {
-      const q = STARTERS[k], off = taken(k);
-      return `<option value="${k}" ${s.q && s.q.k === k ? 'selected' : ''} ${off ? 'disabled' : ''}>${q.n} · ${ELEM_LABEL[q.el]} ${q.v || 1} · ${q.b}${off ? ' (one per orbment)' : ''}</option>`;
+    const cur = qInfo(s.q), cq = s.q && !s.q.k ? s.q : null;
+    const rows = Object.keys(STARTERS).filter(k => !s.l || STARTERS[k].el === s.l).map(k => {
+      const q = STARTERS[k], off = taken(k), on = s.q && s.q.k === k;
+      const hay = `${q.n} ${ELEM_LABEL[q.el]} ${q.b}`.toLowerCase();
+      return `<button type="button" class="qrow ${on ? 'on' : ''}" data-oq="${k}" data-hay="${esc(hay)}" ${off ? 'disabled title="One per orbment"' : ''}>
+        <span class="qn">${elDot(q.el)}<b>${esc(q.n)}</b><span class="num">${ELEM_LABEL[q.el]} ${q.v || 1}</span></span><span class="qb">${esc(q.b)}${off ? ' · one per orbment' : ''}</span></button>`;
     }).join('');
-    const cq = s.q && !s.q.k ? s.q : null;
-    h += `<label>Quartz <select data-oop="pick"><option value="">Empty</option>${opts}<option value="custom" ${cq ? 'selected' : ''}>Custom quartz…</option></select></label>`;
+    h += `<div class="qnow">${cur ? `In this slot: ${elDot(cur.el)}<b>${esc(cur.n)}</b> <button type="button" class="btn small ghost" data-oq="">Remove</button>` : '<span class="muted">Empty slot</span>'}</div>
+      <label>Find a quartz <input type="text" class="qsearch" id="${pre}-qsearch" data-qsearch placeholder="Type a name, element or bonus (e.g. fire, AC, speed)" autocomplete="off"></label>
+      <div class="qlist" id="${pre}-qlist">${rows}<p class="muted qnone" hidden>No quartz match. Try another word, or make a custom one.</p></div>
+      <div><button type="button" class="btn small" data-qcustom>${cq ? 'Edit custom quartz' : 'Custom quartz…'}</button></div>`;
     h += `<form class="row cq" data-oform="custom" ${cq ? '' : 'hidden'}>
         <label class="grow">Name <input type="text" name="n" maxlength="24" value="${cq ? esc(cq.n) : ''}" placeholder="e.g. Attack 2" autocomplete="off"></label>
         <label>Element <select name="el">${(s.l ? [s.l] : ELEM).map(e => `<option value="${e}" ${cq && cq.el === e ? 'selected' : ''}>${ELEM_LABEL[e]}</option>`).join('')}</select></label>
@@ -2669,6 +2746,10 @@ td .stlist { margin-top: 4px; }
       return render();
     }
     if (ev.target.closest('[data-opick="close"]')) { orbSel = null; return render(); }
+    const oq = ev.target.closest('[data-oq]');
+    if (oq && orbSel) return orbDo(orbUnit(oq), { op: 'q', li: orbSel.li, si: orbSel.si, q: oq.dataset.oq ? { k: oq.dataset.oq } : null });
+    const qc = ev.target.closest('[data-qcustom]');
+    if (qc) { const f = qc.closest('.picker').querySelector('[data-oform]'); f.hidden = !f.hidden; if (!f.hidden) f.querySelector('[name=n]').focus(); return; }
     const ns = ev.target.closest('details.near > summary');
     if (ns) { setTimeout(() => { nearOpen = ns.parentElement.open; }, 0); }
     const ca = ev.target.closest('[data-cradd],[data-crdel]');
@@ -2865,6 +2946,33 @@ td .stlist { margin-top: 4px; }
       return dCommit();
     }
     if (ev.target.id === 'pendForm') return confirmPending();
+    if (ev.target.id === 'encForm') {
+      const enc = ENCOUNTERS[$('enc-pick').value]; if (!enc) return;
+      snapshot();
+      const front = queue()[0], base = front ? front.tick : S.now;
+      let i = 0;
+      enc.foes.forEach(f => {
+        for (let k = 0; k < f.n; k++) {
+          const id = 'u' + (S.idN++);
+          const name = f.n > 1 ? `${f.name} ${String.fromCharCode(65 + k)}` : f.name;
+          const nu = { id, name, side: 'enemy', speed: f.speed, hp: f.hp, hpMax: f.hp, note: f.note };
+          if (f.boss) nu.boss = true;
+          S.units.push(nu);
+          // Stagger their first turns across one attack so they don't all go at once.
+          S.entries.push({ unitId: id, kind: 'turn', seq: ++S.seqN, tick: r1(base + delay(S.costs.attack, spd(nu)) * (0.3 + 0.7 * ((i * 37) % 10) / 10)) });
+          i++;
+        }
+      });
+      addLog(`${enc.n.split(' (')[0]}: ${enc.foes.map(f => (f.n > 1 ? f.n + '× ' : '') + f.name).join(', ')} join the battle`);
+      return commit();
+    }
+    if (ev.target.dataset && ev.target.dataset.ehit) {
+      const u = U(ev.target.dataset.ehit), inp = ev.target.querySelector('input'), n = Math.round(Number(inp.value));
+      if (!u || !n || n < 0) return;
+      snapshot();
+      if (enemyHP(u, (Number(u.hp) || 0) - n)) commit(); else undoStack.pop();
+      return;
+    }
     if (ev.target.id === 'stForm') {
       const u = U($('st-who').value); if (!u) return;
       snapshot();
@@ -2878,10 +2986,11 @@ td .stlist { margin-top: 4px; }
       const now = document.getElementById('add-now').checked;
       snapshot();
       const id = 'u' + (S.idN++);
-      const nu = side === 'ally' ? { id, name, side, speed: 0, hp: 0, hpMax: 0, ep: 0, epMax: 0, cp: 0 } : { id, name, side, speed };
+      const ehp = Math.max(0, Math.round(Number($('add-hp').value) || 0));
+      const nu = side === 'ally' ? { id, name, side, speed: 0, hp: 0, hpMax: 0, ep: 0, epMax: 0, cp: 0 } : { id, name, side, speed, hp: ehp, hpMax: ehp };
       if (side === 'ally') {
         // New party members start as a Balanced frame at full HP; a speed typed here makes it a custom frame.
-        nu.sh = normSheet(speed ? { v: 2, frame: 'Custom', fspd: speed } : { v: 2 }, { sh: true });
+        nu.sh = normSheet(speed ? { v: 3, frame: 'Custom', fspd: speed } : { v: 3 }, { sh: true });
         syncSheet(nu); nu.hp = nu.hpMax; nu.ep = nu.epMax;
       }
       S.units.push(nu);
@@ -2891,7 +3000,7 @@ td .stlist { margin-top: 4px; }
       else e.tick = r1((front ? front.tick : S.now) + delay(S.costs.attack, spd(nu)));
       S.entries.push(e);
       addLog(`${name} joins the battle`);
-      document.getElementById('add-name').value = '';
+      document.getElementById('add-name').value = ''; $('add-hp').value = '';
       commit();
     }
   });
@@ -2916,7 +3025,27 @@ td .stlist { margin-top: 4px; }
     if (ptrDown) refreshQueued = true;
     else setTimeout(refreshAfterEdit, 0);
   });
+  /* Quartz search: hide rows that don't match every word typed. */
+  function filterQuartz(inp) {
+    // Each word typed must start a word in the quartz's name, element or bonus ("ac" finds "+1 AC", not "attack").
+    const words = inp.value.toLowerCase().split(/[^a-z0-9%]+/).filter(Boolean);
+    const list = inp.closest('.picker').querySelector('.qlist');
+    let shown = 0;
+    list.querySelectorAll('.qrow').forEach(r => {
+      const toks = r.dataset.hay.split(/[^a-z0-9%]+/).filter(Boolean);
+      const ok = words.every(w => toks.some(t => t.startsWith(w)));
+      r.hidden = !ok; if (ok) shown++;
+    });
+    list.querySelector('.qnone').hidden = shown > 0;
+  }
+  document.addEventListener('keydown', ev => {
+    if (ev.key !== 'Enter' || !ev.target.matches || !ev.target.matches('[data-qsearch]')) return;
+    ev.preventDefault();
+    const first = [...ev.target.closest('.picker').querySelectorAll('.qrow')].find(r => !r.hidden && !r.disabled);
+    if (first) first.click();
+  });
   document.addEventListener('input', ev => {
+    if (ev.target.matches && ev.target.matches('[data-qsearch]')) return filterQuartz(ev.target);
     if (PLAYER) { if (ev.target.id === 'me-init') ev.target.dataset.touched = '1'; return; }
     const t = ev.target;
     if (S.pending && t.id === 'f-emp') { S.pending.emp = t.checked; return save(); }
@@ -2967,12 +3096,6 @@ td .stlist { margin-top: 4px; }
       const at = { li: orbSel.li, si: orbSel.si };
       if (k === 'open') return orbDo(u, Object.assign({ op: 'open', on: t.checked }, at));
       if (k === 'lock') return orbDo(u, Object.assign({ op: 'lock', el: t.value }, at));
-      if (k === 'pick') {
-        const form = t.closest('.picker').querySelector('[data-oform]');
-        if (t.value === 'custom') { form.hidden = false; const n = form.querySelector('[name=n]'); if (n) n.focus(); return; }
-        form.hidden = true;
-        return orbDo(u, Object.assign({ op: 'q', q: t.value ? { k: t.value } : null }, at));
-      }
       return;
     }
     if (PLAYER) {
@@ -3035,6 +3158,14 @@ td .stlist { margin-top: 4px; }
       snapshot();
       if (t.dataset.uf === 'name') { const v = t.value.trim(); if (v) u.name = v; }
       if (t.dataset.uf === 'speed') u.speed = clampSpd(t.value);
+      if (t.dataset.uf === 'ehpMax') {
+        const m = Math.max(0, Math.round(Number(t.value) || 0));
+        const was = Number(u.hpMax) || 0;
+        u.hpMax = m;
+        if (!was || !(u.hp > 0)) u.hp = m; else u.hp = Math.min(u.hp, m);
+        addLog(`${u.name}'s max HP set to ${m}`, null, null, true);
+      }
+      if (t.dataset.uf === 'ehp') { if (!enemyHP(u, Number(t.value) || 0)) { undoStack.pop(); return render(); } }
       return commit();
     }
     const k = t.dataset.set;
@@ -3047,6 +3178,7 @@ td .stlist { margin-top: 4px; }
 
   function readLiveCode() { try { return localStorage.getItem(LIVE_KEY); } catch (e) { return null; } }
 
+  $('enc-pick').innerHTML = Object.keys(ENCOUNTERS).map(k => `<option value="${k}">${esc(ENCOUNTERS[k].n)}</option>`).join('');
   $('artsList').innerHTML = ARTS.map(a => `<option value="${esc(a.n)}">${ELEM_LABEL[a.g]} · ${a.ep} EP</option>`).join('');
   if (PLAYER) startPlayer();
   else {

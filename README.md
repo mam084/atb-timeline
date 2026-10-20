@@ -33,6 +33,11 @@ Turn trackers for tabletop RPGs. The GM runs them on a laptop, and players follo
 - **Status durations:** the Add status form has a **From** box. Buffs last their listed turns + the caster's WIS; ailments and stat downs last listed + the caster's LCK − the target's WIS (minimum 1). Mark an enemy as **Boss** in the Combatants list to halve those (round down, minimum 1) and make it immune to Petrify.
 - **Quartz (Daybreak versions):** EP Cut 1 (Space 1) cuts art EP costs by 10%; Cast 1 (Time 1) cuts cast times by 10%; Defense 1 is −1 weapon damage taken; Evade 1 is +1 AC.
 
+## GM tools
+- **Quartz search:** tap a slot and type to find a quartz by name, element or bonus (each word matches the start of a word: "fire", "ac", "weapon damage"). Enter picks the first match; Remove empties the slot; custom quartz are still there.
+- **Enemy HP:** the Combatants list has an HP column. Type current/max HP, or use the Hit box to subtract damage; at 0 the enemy is defeated (KO), and Revive brings it back at 1 HP. A thin HP bar shows on your timeline cards. Players never see enemy HP.
+- **Test encounters:** Combatants › Test encounter › Add enemies loads one of four playtest fights for 3 level-3 PCs (Back-Alley Shakedown, Geofront Vermin, Orbal Security Sweep, Almata Enforcer) with HP, speed, Boss flag and a stat line under each name. Full write-ups are in the rules doc's Test Encounters tab.
+
 ## Initiative tab (D&D)
 - Add your party and monsters. Monsters with no initiative roll d20 + bonus automatically (**How many** adds Goblin A, B, C…).
 - Players open the same link, pick their character (or add a new one), and **send their initiative** from their phone. It drops straight into the order.
