@@ -722,11 +722,11 @@ td .stlist { margin-top: 4px; }
     Bulwark: { hd: 12, spd: -1, ep: 'Low', arm: 3, lay: '3+1+1+1', saves: ['con', 'str'], feel: 'Tank' },
     Vanguard: { hd: 10, spd: 0, ep: 'Low–mid', arm: 3, lay: '3+2+1', saves: ['wis', 'str'], feel: 'Front-line fighter' },
     Spellblade: { hd: 10, spd: -1, ep: 'Mid', arm: 3, lay: '3+3', saves: ['con', 'int'], feel: 'Armored hybrid' },
-    Duelist: { hd: 8, spd: 1, ep: 'Low', arm: 2, lay: '3+1+1+1', saves: ['dex', 'str'], feel: 'Fast melee' },
-    Balanced: { hd: 8, spd: 0, ep: 'Mid', arm: 2, lay: '3+3', saves: ['con', 'cha'], feel: 'All-rounder' },
+    Duelist: { hd: 10, spd: 1, ep: 'Low', arm: 2, lay: '3+1+1+1', saves: ['dex', 'str'], feel: 'Fast melee' },
+    Balanced: { hd: 10, spd: 0, ep: 'Mid', arm: 2, lay: '3+3', saves: ['con', 'cha'], feel: 'All-rounder' },
     Marksman: { hd: 8, spd: 0, ep: 'Low–mid', arm: 2, lay: '3+2+1', saves: ['dex', 'int'], feel: 'Ranged' },
     Tactician: { hd: 8, spd: 0, ep: 'Mid–high', arm: 2, lay: '4+2', saves: ['wis', 'int'], feel: 'Support' },
-    Phantom: { hd: 6, spd: 1, ep: 'Mid', arm: 1, lay: '3+3', saves: ['dex', 'cha'], feel: 'Scout / rogue' },
+    Phantom: { hd: 8, spd: 1, ep: 'Mid', arm: 1, lay: '3+3', saves: ['dex', 'cha'], feel: 'Scout / rogue' },
     Adept: { hd: 6, spd: 0, ep: 'High', arm: 1, lay: '5+1', saves: ['wis', 'cha'], feel: 'Arts caster' },
     Sage: { hd: 6, spd: -1, ep: 'Very high', arm: 1, lay: '6', saves: ['wis', 'int'], feel: 'Heavy caster' }
   };
@@ -781,7 +781,7 @@ td .stlist { margin-top: 4px; }
     .filter(([k, v]) => SKILL[k] && (v === 1 || v === 2)));
   /* Character Creation Guide: 4 skills to start, plus one skill or tool proficiency every 3 levels. */
   const skillGoal = lvl => 4 + Math.floor(lvl / 3);
-  const DEF_SHEET = { v: 3, lvl: 1, str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10, frame: 'Balanced', hd: 8, fspd: 0,
+  const DEF_SHEET = { v: 3, lvl: 1, str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10, frame: 'Balanced', hd: 10, fspd: 0,
     hpAdj: 0, epBase: 0, armor: 'none', mv: 6, orb: null, crafts: [], sc: { n: '', x: '' },
     vhA: '', vhS: '', vdA: '', vdS: '', style: '', wpn: '', boots: 'std', acc1: 'none', acc2: 'none',
     sk: {}, sv1: '', sv2: '', badge: '', tools: '' };
