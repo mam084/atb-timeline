@@ -365,7 +365,7 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
 .ehpbar { display: block; height: 5px; margin-top: 4px; width: 8.2em; }
 .ehit { display: flex; gap: 3px; margin-top: 4px; }
 .ehit input { width: 3.8em; padding: 3px 5px; }
-#roster { min-width: 820px; }
+#roster { min-width: 880px; }
 #roster td:nth-child(2) { min-width: 12em; width: 30%; }
 #roster td:nth-child(2) .nameinput { width: 100%; }
 .enote { font-size: .74rem; color: var(--muted); margin-top: 3px; line-height: 1.3; }
@@ -468,7 +468,7 @@ td .stlist { margin-top: 4px; }
     <div class="tools gm">
       <span class="livebadge" id="gmLive" hidden></span>
       <button class="btn" data-cmd="undo" id="undoBtn" title="Undo (Ctrl/Cmd+Z)">Undo</button>
-      <button class="btn atb-only" data-cmd="newbattle" title="Shuffle starting positions and reset the turn counter">New battle</button>
+      <button class="btn atb-only" data-cmd="newbattle" title="Roll initiative for everyone in the Combatants list and start a fresh battle">Start battle</button>
       <button class="btn primary" data-cmd="present" title="Hide the GM controls for the table screen">Player view</button>
     </div>
     <div class="tools present-only">
@@ -559,8 +559,14 @@ td .stlist { margin-top: 4px; }
         </label>
         <label title="+ is faster. For party members this sets their frame speed (−1 to +1).">Speed <input type="number" id="add-mod" value="0" step="1" min="-9" max="9"></label>
         <label title="Enemies only; party HP comes from the sheet">HP <input type="number" id="add-hp" min="0" placeholder="—"></label>
+        <label title="Enemies only: added to their d20 initiative roll, like DEX. Party members use their sheet's DEX.">Init <input type="number" id="add-init" min="-5" max="10" placeholder="+0"></label>
         <label class="inline"><input type="checkbox" id="add-now"> Act next</label>
         <button class="btn" type="submit">Add</button>
+      </form>
+      <form class="addrow" id="battleForm">
+        <label>Opening <select id="bt-open"><option value="normal">Normal</option><option value="party">Party advantage (enemies +15)</option><option value="enemy">Enemy advantage (party +15)</option></select></label>
+        <button class="btn primary" type="submit" title="Roll initiative (d20 + DEX, scaled by speed) and start a fresh battle">Start battle</button>
+        <button class="btn warn" type="button" data-cmd="clearenemies" title="Remove every enemy; the party stays">Clear enemies</button>
       </form>
       <form class="addrow" id="encForm">
         <label class="grow">Test encounter <select id="enc-pick"></select></label>
@@ -568,7 +574,7 @@ td .stlist { margin-top: 4px; }
       </form>
       <form class="addrow" id="stForm">
         <label>Status for <select id="st-who"></select></label>
-        <label title="Whose art or quartz: buffs add their WIS, ailments and stat downs add their LCK">From <select id="st-from"></select></label>
+        <label title="Whose art or quartz: buffs add their WIS, stat downs add their LCK">From <select id="st-from"></select></label>
         <label class="grow">Status <select id="st-k"></select></label>
         <label>Turns <input type="number" id="st-t" min="1" max="99"></label>
         <button class="btn" type="submit">Add status</button>
@@ -662,29 +668,33 @@ td .stlist { margin-top: 4px; }
     scraft: { label: 'S-Craft', cost: 'scraft', named: 'S-Craft name' },
     custom: { label: 'Custom', cost: 'attack', named: 'Action' },
     resolve: { label: 'Resolve', cost: 'afterCast' },
-    skip: { label: 'Skip turn', cost: 'attack' }
+    skip: { label: 'Skip turn', cost: 'stun' }
   };
-  const COST_LABELS = { attack: 'Attack', craft: 'Craft', castTime: 'Arts cast', afterCast: 'Arts after-cast', item: 'Item', move: 'Move', defend: 'Defend', scraft: 'S-Craft' };
+  const COST_LABELS = { attack: 'Attack', craft: 'Craft', castTime: 'Arts cast', afterCast: 'Arts after-cast', item: 'Item', move: 'Move', defend: 'Defend', scraft: 'S-Craft', stun: 'Stunned turn' };
   /* Delays are Trails from Zero's base AT values (Core Rules › Action delays): an attack is a 30-tick turn. */
-  const DEF_COSTS = { attack: 30, craft: 30, castTime: 20, afterCast: 15, item: 20, move: 20, defend: 20, scraft: 40 };
+  const DEF_COSTS = { attack: 30, craft: 30, castTime: 20, afterCast: 15, item: 20, move: 20, defend: 20, scraft: 40, stun: 20 };
+  const STUN_TURNS = 2;  // Freeze, Faint, Sleep, Petrify: always 2 turns (1 on a boss); each one passes for the Stunned turn delay
+  const INIT_BASE = 25;  // opening position = (25 − (d20 + DEX)) ticks, scaled by speed
+  const OPENING_PUSH = 15; // an ambush puts the caught side this many ticks later
+  const OPENINGS = { normal: 'Normal', party: 'Party advantage', enemy: 'Enemy advantage' };
   const OLD_COSTS = { attack: 10, craft: 12, castTime: 6, afterCast: 8, item: 8, move: 6, defend: 8, scraft: 16 }; // before the Zero scale
   const DEF_SETTINGS = { show: 12, rate: 30, numbers: false, step: 10, mode: 'rate', pct: 10 };
   const SPEED_CAP = 3; // speed from all sources caps at ±3
   /* Test encounters for 3 level-3 PCs (also in the rules doc's Test Encounters tab). n = how many. */
   const ENCOUNTERS = {
     alley: { n: 'Back-Alley Shakedown (easy · basics)', foes: [
-      { name: 'Thug', n: 3, hp: 13, speed: 0, note: 'AC 12 · Club +4, 1d6+2 · Cheap Shot (craft, delay 30, every other turn): +4, 1d6+2, Faint on d20 19+' },
-      { name: 'Thug Boss', n: 1, hp: 30, speed: 0, note: 'AC 14 · Knuckles +5, 1d8+3 · Rally (craft, delay 25, once): allies in r3 get Forte, 2 turns · flees at 10 HP' } ] },
+      { name: 'Thug', n: 3, init: 1, hp: 13, speed: 0, note: 'AC 12 · Club +4, 1d6+2 · Cheap Shot (craft, delay 30, every other turn): +4, 1d6+2, Faint on d20 19+' },
+      { name: 'Thug Boss', n: 1, init: 1, hp: 30, speed: 0, note: 'AC 14 · Knuckles +5, 1d8+3 · Rally (craft, delay 25, once): allies in r3 get Forte, 2 turns · flees at 10 HP' } ] },
     geofront: { n: 'Geofront Vermin (medium · statuses & areas)', foes: [
-      { name: 'Ember Slime', n: 2, hp: 18, speed: -1, note: 'AC 11 · Pseudopod +3, 1d6+1 fire, Burn on d20 17+ · on death bursts: r1, DEX DC 11, 1d6' },
-      { name: 'Needle Bat', n: 2, hp: 9, speed: 1, note: 'AC 13 · flies, move 8 · Needle +4, 1d4+2, Seal on d20 19+' },
-      { name: 'Stone Carapace', n: 1, hp: 30, speed: -2, note: 'AC 16 · Slam +4, 1d10+2 · casts Crest on itself (cast 10, rec. 25): +2 AC, 2 turns' } ] },
+      { name: 'Ember Slime', n: 2, init: -1, hp: 18, speed: -1, note: 'AC 11 · Pseudopod +3, 1d6+1 fire, Burn on d20 17+ · on death bursts: r1, DEX DC 11, 1d6' },
+      { name: 'Needle Bat', n: 2, init: 3, hp: 9, speed: 1, note: 'AC 13 · flies, move 8 · Needle +4, 1d4+2, Seal on d20 19+' },
+      { name: 'Stone Carapace', n: 1, init: -1, hp: 30, speed: -2, note: 'AC 16 · Slam +4, 1d10+2 · casts Crest on itself (cast 10, rec. 25): +2 AC, 2 turns' } ] },
     security: { n: 'Orbal Security Sweep (medium–hard · casting & Impede)', foes: [
-      { name: 'Sentry Drone', n: 2, hp: 16, speed: 0, note: 'AC 14 · Stun Shot (range 12) +4, 1d6+2 · casts Sparkle (cast 15, rec. 15): +4, 2d6, Seal on d20 19+' },
-      { name: 'Guard Mech', n: 1, hp: 42, speed: -1, note: 'AC 16 · Arm Slam +5, 1d10+3 · Charge Cannon (charges like an art: cast 30, rec. 15): line 12 × 3, DEX DC 13, 4d6, half on save' } ] },
+      { name: 'Sentry Drone', n: 2, init: 2, hp: 16, speed: 0, note: 'AC 14 · Stun Shot (range 12) +4, 1d6+2 · casts Sparkle (cast 15, rec. 15): +4, 2d6, Seal on d20 19+' },
+      { name: 'Guard Mech', n: 1, init: 0, hp: 42, speed: -1, note: 'AC 16 · Arm Slam +5, 1d10+3 · Charge Cannon (charges like an art: cast 30, rec. 15): line 12 × 3, DEX DC 13, 4d6, half on save' } ] },
     enforcer: { n: 'Almata Enforcer (hard · boss & S-Craft)', foes: [
-      { name: 'Enforcer', n: 1, hp: 70, speed: 1, boss: true, note: 'BOSS · AC 15 · Blade +6, 2d6+3 · Shadow Step (25): teleport 6 + Blade · Crimson Fan (30): r2, DEX DC 14, 3d8, Burn 17+ · S-Craft once at ≤35 HP: r3, DEX DC 14, 5d8, half on save' },
-      { name: 'Almata Grunt', n: 2, hp: 16, speed: 0, note: 'AC 13 · Pistol (range 10) +4, 1d8+2 · Cover Fire (craft, 30): target has disadvantage on its next attack' } ] }
+      { name: 'Enforcer', n: 1, init: 3, hp: 70, speed: 1, boss: true, note: 'BOSS · AC 15 · Blade +6, 2d6+3 · Shadow Step (25): teleport 6 + Blade · Crimson Fan (30): r2, DEX DC 14, 3d8, Burn 17+ · S-Craft once at ≤35 HP: r3, DEX DC 14, 5d8, half on save' },
+      { name: 'Almata Grunt', n: 2, init: 2, hp: 16, speed: 0, note: 'AC 13 · Pistol (range 10) +4, 1d8+2 · Cover Fire (craft, 30): target has disadvantage on its next attack' } ] }
   };
   /* CP rules (see the rulebook): CP caps at 200. An S-Craft needs 100 and spends 100; at 200 it can be
      empowered and spends all 200. A character needs a regular turn between S-Crafts. */
@@ -932,11 +942,14 @@ td .stlist { margin-top: 4px; }
     const cut = tracked(u) && u.sh ? orbFx(u.sh.orb).epcut : 0;
     return cut ? Math.max(1, Math.floor(a.ep * (1 - EPCUT_PCT / 100 * cut))) : a.ep;
   }
-  /* An art's cast time for this caster: each Cast 1 quartz cuts it by 10%. */
-  function castTime(u, a) {
+  /* Cast quartz: each Cast 1 cuts cast times by 10%. It multiplies the cast time before speed, and the
+     final delay is rounded once (15 × 0.9 = 13.5 → 14 at speed ±0), so the typed cast time stays whole. */
+  function castMul(u) {
     const cut = tracked(u) && u.sh ? orbFx(u.sh.orb).castcut : 0;
-    return cut ? r1(Math.max(1, a.c * (1 - CAST_PCT / 100 * cut))) : a.c;
+    return Math.max(0.1, 1 - CAST_PCT / 100 * cut);
   }
+  /* Arts this caster can pick: what their orbment allows (party members with an orbment), otherwise every art. */
+  const castable = u => tracked(u) && u.sh && u.sh.orb ? artsFor(u.sh.orb).can : ARTS;
   const meets = (t, r) => Object.keys(r).every(e => (t[e] || 0) >= r[e]);
   const missing = (t, r) => Object.keys(r).reduce((n, e) => n + Math.max(0, r[e] - (t[e] || 0)), 0);
   function artsFor(o) {
@@ -968,10 +981,10 @@ td .stlist { margin-top: 4px; }
      t = default turns (null: until cured or used). fx: speed / AC / movement changes.
      start: what happens at the start of each of the target's turns. Turns count the target's own turns. ---------- */
   const STATUS = {
-    petrify: { n: 'Petrify', kind: 'ail', t: null, noAct: 1, d: 'Petrified (5e). CON save at the end of each turn, or cured.' },
-    freeze: { n: 'Freeze', kind: 'ail', t: null, skip: 1, d: "Can't act; next turn is skipped." },
-    faint: { n: 'Faint', kind: 'ail', t: null, skip: 1, d: 'Stunned; next turn is skipped.' },
-    sleep: { n: 'Sleep', kind: 'ail', t: 4, noAct: 1, wake: 1, d: "Can't act. Ends after its duration or when damaged." },
+    petrify: { n: 'Petrify', kind: 'ail', t: STUN_TURNS, stun: 1, d: "Petrified: can't act, so each turn passes quickly. A CON save at the end of each turn ends it early." },
+    freeze: { n: 'Freeze', kind: 'ail', t: STUN_TURNS, stun: 1, start: 'freeze', d: "Frozen: can't act, so each turn passes quickly, and takes 10% of max HP at the start of each one." },
+    faint: { n: 'Faint', kind: 'ail', t: STUN_TURNS, stun: 1, d: "Stunned: can't act, so each turn passes quickly." },
+    sleep: { n: 'Sleep', kind: 'ail', t: STUN_TURNS, stun: 1, wake: 1, d: "Asleep: can't act, so each turn passes quickly. Ends early when damaged." },
     burn: { n: 'Burn', kind: 'ail', t: 2, start: 'burn', d: '1d6 fire damage at the start of each turn.' },
     seal: { n: 'Seal', kind: 'ail', t: 4, noCraft: 1, d: "Can't use crafts or S-Crafts." },
     mute: { n: 'Mute', kind: 'ail', t: 4, noArts: 1, d: "Can't cast arts; a charging art is cancelled." },
@@ -1002,14 +1015,15 @@ td .stlist { margin-top: 4px; }
     return fx;
   }
   const stLabel = x => STATUS[x.k].n + (x.t != null ? ' ' + x.t : '');
-  /* Default turns for a new status (Arts d20 › Durations). Buffs: listed + the caster's WIS. Ailments and stat downs:
-     listed + the caster's LCK − the target's WIS (minimum 1), halved on a boss (round down, minimum 1). */
+  /* Default turns for a new status (Arts d20 › Durations). Buffs: listed + the caster's WIS.
+     Stuns (Freeze, Faint, Sleep, Petrify): always 2. Other ailments: listed − the target's WIS.
+     Stat downs: listed + the caster's LCK − the target's WIS. Minimum 1; halved on a boss (round down, minimum 1). */
   function stTurns(u, k, from) {
     const s = STATUS[k];
     if (s.t == null) return null;
     const mod = (x, a) => tracked(x) && x.sh ? abMod(score(x.sh, a)) : 0;
     if (s.kind === 'buff') return Math.max(1, s.t + (from ? mod(from, 'wis') : 0));
-    let t = Math.max(1, s.t + (from ? mod(from, 'cha') : 0) - mod(u, 'wis'));
+    let t = s.stun ? s.t : Math.max(1, s.t + (s.kind === 'down' && from ? mod(from, 'cha') : 0) - mod(u, 'wis'));
     if (u && u.boss) t = Math.max(1, Math.floor(t / 2));
     return t;
   }
@@ -1147,7 +1161,7 @@ td .stlist { margin-top: 4px; }
       // Tables from before the Zero AT scale: default delays become Zero's, custom ones and the timeline are tripled.
       const c = Object.assign({}, OLD_COSTS, s.costs);
       const isOld = Object.keys(OLD_COSTS).every(k => Number(c[k]) === OLD_COSTS[k]);
-      s.costs = isOld ? Object.assign({}, DEF_COSTS) : Object.fromEntries(Object.keys(DEF_COSTS).map(k => [k, Math.round((Number(c[k]) || OLD_COSTS[k]) * 3)]));
+      s.costs = isOld ? Object.assign({}, DEF_COSTS) : Object.fromEntries(Object.keys(OLD_COSTS).map(k => [k, Math.round((Number(c[k]) || OLD_COSTS[k]) * 3)]));
       (s.entries || []).forEach(e => { e.tick = r1((Number(e.tick) || 0) * 3); if (e.after != null) e.after = Math.round(e.after * 3); });
       s.now = r1((Number(s.now) || 0) * 3);
       if (s.pending) s.pending = null;
@@ -1198,12 +1212,13 @@ td .stlist { margin-top: 4px; }
 
   /* Delay = base delay adjusted by speed (positive = faster).
      rate: the rulebook formula, base × 10 / (10 + speed) at 10% per point. Each point is the same 10% more
-           or fewer turns, so stacking speed never snowballs (+1 → 9.1, −1 → 11.1 on a base of 10). One decimal.
+           or fewer turns, so stacking speed never snowballs (+1 → 27, −1 → 33 on a base of 30).
+     Every percentage (speed, Cast quartz) is applied first and the result is rounded once, to a whole tick.
      pct:  each point changes the delay itself by a fixed %. flat: each point adds or removes 1. */
   function delay(base, speed) {
     base = Number(base) || 0; speed = Number(speed) || 0;
     const st = S.settings;
-    if (st.mode === 'rate') return Math.max(1, r1(base * 100 / Math.max(10, 100 + speed * st.pct)));
+    if (st.mode === 'rate') return Math.max(1, Math.round(base * 100 / Math.max(10, 100 + speed * st.pct)));
     const v = st.mode === 'flat' ? base - speed : base * (1 - speed * st.pct / 100);
     return Math.max(1, Math.round(v));
   }
@@ -1258,35 +1273,38 @@ td .stlist { margin-top: 4px; }
     return true;
   }
   const d6 = () => { const r = new Uint32Array(1); try { crypto.getRandomValues(r); } catch (e) { r[0] = Math.random() * 4294967296; } return 1 + (r[0] % 6); };
-  /* Effects at the start of a character's turn: Burn, Regen, Impassion. */
+  /* Damage from a status: taken off party members and enemies with tracked HP; otherwise just logged. */
+  function stDamage(u, n, what, unknown) {
+    if (unknown) return addLog(`${u.name} takes ${what}`);
+    if (tracked(u) && u.hpMax > 0) { const x = -bump(u, 'hp', -n); addLog(`${u.name} takes ${x} ${what} → HP ${u.hp}/${u.hpMax}`); return; }
+    if (!tracked(u) && u.hpMax > 0) { addLog(`${u.name} takes ${n} ${what}`); enemyHP(u, (Number(u.hp) || 0) - n); return; }
+    addLog(`${u.name} takes ${n} ${what}`);
+  }
+  /* Effects at the start of a character's turn: Burn, Freeze, Regen, Impassion. */
   function startOfTurn(u) {
     sts(u).forEach(x => {
       if (x.fresh) return; // put on during this same turn: starts next turn
       const s = STATUS[x.k];
-      if (s.start === 'burn') {
-        const r = d6();
-        if (tracked(u) && u.hpMax > 0) { const n = -bump(u, 'hp', -r); addLog(`${u.name} takes ${n} burn damage (1d6: ${r}) → HP ${u.hp}/${u.hpMax}`); }
-        else addLog(`${u.name} takes ${r} burn damage (1d6)`);
-      }
+      if (s.start === 'burn') stDamage(u, d6(), 'burn damage (1d6)');
+      if (s.start === 'freeze') stDamage(u, Math.max(1, Math.ceil((Number(u.hpMax) || 0) * .1)), 'freeze damage (10% of max HP)', !(u.hpMax > 0));
       if (s.start === 'regen' && tracked(u) && u.hpMax > 0) { const n = bump(u, 'hp', Math.ceil(u.hpMax * .1)); if (n) addLog(`${u.name} regenerates ${n} HP → HP ${u.hp}/${u.hpMax}`); }
       if (s.start === 'cp' && tracked(u)) { const n = bump(u, 'cp', 10); if (n) addLog(`${u.name} gains ${n} CP (Impassion) → ${u.cp} CP`); }
     });
   }
-  /* After a character's turn, their statuses count down. Freeze and Faint end once the turn has been skipped. */
+  /* After a character's turn (acted or passed), their statuses count down. */
   function endOfTurn(u, skipped) {
     if (!Array.isArray(u.st)) return;
     const keep = [];
     u.st.forEach(x => {
       const s = STATUS[x.k]; if (!s) return;
       if (x.fresh) { delete x.fresh; keep.push(x); return; }
-      if (skipped && s.skip) { addLog(`${u.name} recovers from ${s.n}`); return; }
       if (x.t != null) { x.t -= 1; if (x.t <= 0) { addLog(`${u.name}'s ${s.n} wears off`); return; } }
       keep.push(x);
     });
     u.st = keep;
   }
   /* Statuses that stop a character from acting this turn. */
-  const stopped = u => sts(u).filter(x => STATUS[x.k].skip || STATUS[x.k].noAct);
+  const stopped = u => sts(u).filter(x => STATUS[x.k].stun);
   const resText = (u, k) => k === 'cp' ? `${u.cp} CP` : `${RES[k]} ${u[k]}${u[k + 'Max'] ? '/' + u[k + 'Max'] : ''}`;
   /* The AT bonus a unit lands on: heal / EP / CP bonuses apply on their own; CRIT is still called at the table. */
   function applyBonus(u, b) {
@@ -1401,7 +1419,7 @@ td .stlist { margin-top: 4px; }
     const p = S.pending, q = queue(), cur = q[0];
     if (!p || !cur || p.unitId !== cur.unitId) return null;
     const u = U(cur.unitId);
-    const d = delay(p.base, spd(u));
+    const d = delay(p.base * (p.kind === 'arts' ? castMul(u) : 1), spd(u));
     const tick = cur.tick + d;
     const others = q.slice(1);
     const index = others.filter(e => e.tick <= tick).length; // ties land behind
@@ -1416,7 +1434,7 @@ td .stlist { margin-top: 4px; }
     if (p.kind === 'item' && p.name) return `${u.name} uses ${p.name}`;
     if (p.kind === 'scraft') return `${u.name} unleashes ${p.name || 'an S-Craft'}`;
     if (p.kind === 'custom') return `${u.name}: ${p.name || 'custom action'}`;
-    if (p.kind === 'skip') return `${u.name}'s turn is skipped${stopped(u).length ? ` (${stopped(u).map(x => STATUS[x.k].n).join(', ')})` : ''}`;
+    if (p.kind === 'skip') return `${u.name}'s turn passes${stopped(u).length ? ` (${stopped(u).map(x => STATUS[x.k].n).join(', ')})` : ''}`;
     return `${u.name}: ${a.label}`;
   }
 
@@ -1457,6 +1475,10 @@ td .stlist { margin-top: 4px; }
     const cpBonus = b === 'cp20' ? 20 : b === 'cp50' ? 50 : 0;
     const epBonus = b === 'ep10' ? Math.ceil(u.epMax * .1) : b === 'ep50' ? Math.ceil(u.epMax * .5) : 0;
     if (p.kind === 'craft' && (p.cp || 0) > Math.min(CP_CAP, u.cp + cpBonus)) return { ok: false, msg: `Not enough CP: ${u.name} has ${u.cp}.` };
+    if (p.kind === 'arts' && u.sh.orb) {
+      const a = ARTS_BY[String(p.name || '').trim().toLowerCase()];
+      if (a && !castable(u).includes(a)) return { ok: false, msg: `${a.n} isn't on ${u.name}'s orbment (needs ${reqText(a.r)} on one line).` };
+    }
     if (p.kind === 'arts' && (p.ep || 0) > u.ep + epBonus) return { ok: false, msg: `Not enough EP: ${u.name} has ${u.ep}.` };
     if (p.kind === 'scraft' && u.sLock) return { ok: false, msg: sBlock(u).msg };
     if (p.kind === 'scraft' && u.cp + cpBonus < S_MIN) return { ok: false, msg: `S-Crafts need ${S_MIN} CP: ${u.name} has ${u.cp}.` };
@@ -1530,7 +1552,7 @@ td .stlist { margin-top: 4px; }
       if (S.pending && S.pending.unitId === id) S.pending = null;
     } else if (cmd === 'boss') {
       u.boss = !u.boss;
-      addLog(u.boss ? `${u.name} is a boss: ailments and stat downs on them are halved; immune to Petrify and K.O.` : `${u.name} is no longer a boss`);
+      addLog(u.boss ? `${u.name} is a boss: ailments and stat downs on them are halved, rolls to inflict them have disadvantage; immune to Petrify and K.O.` : `${u.name} is no longer a boss`);
     } else if (cmd === 'ko') {
       u.ko = !u.ko;
       if (u.ko) u.st = [];
@@ -1552,17 +1574,43 @@ td .stlist { margin-top: 4px; }
     commit();
   }
 
-  function newBattle() {
+  /* Initiative bonus: DEX from the sheet for party members, the GM's number for enemies. */
+  const initBonus = u => tracked(u) && u.sh ? derive(u).mods.dex : (Number(u.init) || 0);
+  /* Start a battle: everyone rolls d20 + initiative bonus. The higher the roll, the earlier the first turn:
+     (25 − roll) ticks, scaled by speed like any delay (so faster characters open sooner), never below 0.
+     An ambush pushes the caught side's openings back. Party HP, EP and CP carry over; statuses and KOs clear. */
+  function newBattle(open) {
+    open = OPENINGS[open] ? open : 'normal';
     snapshot();
     S.now = 0; S.slot = 0; S.seed = (Math.random() * 2 ** 31) | 0; S.overrides = {}; S.pending = null;
     S.units.forEach(u => { u.ko = false; delete u.sLock; u.st = []; });
-    S.entries.forEach(e => {
-      const u = U(e.unitId);
-      e.tick = Math.round(delay(S.costs.attack, spd(u)) * Math.random());
-      e.seq = ++S.seqN; e.kind = 'turn'; delete e.art; delete e.after; e.sbreak = false;
-    });
-    S.log = []; addLog('A new battle begins.');
+    const rolls = S.entries.map(e => {
+      const u = U(e.unitId); if (!u) return null;
+      const r = d20(), b = initBonus(u), tot = r + b;
+      const push = (open === 'party' && !tracked(u)) || (open === 'enemy' && tracked(u)) ? OPENING_PUSH : 0;
+      const scaled = Math.round(Math.max(0, INIT_BASE - tot) * delay(100, spd(u)) / 100);
+      e.tick = scaled + push;
+      e.kind = 'turn'; delete e.art; delete e.after; e.sbreak = false;
+      return { e, u, r, b, tot };
+    }).filter(Boolean);
+    // Ties: the higher roll goes first, then the party.
+    rolls.sort((x, y) => x.e.tick - y.e.tick || y.tot - x.tot || (tracked(y.u) - tracked(x.u))).forEach(x => { x.e.seq = ++S.seqN; });
+    S.log = [];
+    const by = rolls.slice().sort((x, y) => y.tot - x.tot);
+    addLog(`A new battle begins${open !== 'normal' ? ` (${OPENINGS[open]})` : ''}. Initiative: ${by.filter(x => tracked(x.u)).map(x => `${x.u.name} ${x.tot}`).join(', ') || '—'}`);
+    addLog(`Initiative rolls: ${by.map(x => `${x.u.name} ${x.r}${x.b ? ` ${x.b < 0 ? '−' : '+'} ${Math.abs(x.b)}` : ''} = ${x.tot} → tick ${x.e.tick}`).join(' · ')}`, null, null, true);
     S.units.filter(u => tracked(u) && u.sh && gearSum(u.sh, 'cp')).forEach(u => { const n = bump(u, 'cp', gearSum(u.sh, 'cp')); if (n) addLog(`${u.name} starts with +${n} CP (Fighter's medal) → ${u.cp} CP`); });
+    commit();
+  }
+  /* Remove every enemy; the party stays for the next fight. */
+  function clearEnemies() {
+    const gone = S.units.filter(u => !tracked(u));
+    if (!gone.length) return;
+    snapshot();
+    const ids = new Set(gone.map(u => u.id));
+    S.units = S.units.filter(u => !ids.has(u.id)); S.entries = S.entries.filter(e => !ids.has(e.unitId));
+    if (S.pending && ids.has(S.pending.unitId)) S.pending = null;
+    addLog(`${gone.length} ${gone.length === 1 ? 'enemy leaves' : 'enemies leave'} the battle`);
     commit();
   }
 
@@ -1680,8 +1728,7 @@ td .stlist { margin-top: 4px; }
       const stop = stopped(u);
       if (stop.length) {
         const names = stop.map(x => STATUS[x.k].n).join(', ');
-        const skip = stop.some(x => STATUS[x.k].skip);
-        h += `<div class="stbanner"><span><b>${esc(names)}:</b> ${skip ? 'this turn is skipped.' : `${esc(u.name)} can't act.`}</span><button class="btn primary" data-act="skip">Skip turn</button></div>`;
+        h += `<div class="stbanner"><span><b>${esc(names)}:</b> ${esc(u.name)} can't act; the turn passes (+${fmtT(delay(S.costs.stun, spd(u)))}).</span><button class="btn primary" data-act="skip">Pass turn</button></div>`;
       }
       if (sts(u).length) h += `<div>${stChips(u, true)}</div>`;
       h += `<div class="actions">${['attack', 'craft', 'arts', 'item', 'move', 'defend', 'scraft', 'custom'].map(k => actBtn(k, u)).join('')}</div>`;
@@ -1694,14 +1741,14 @@ td .stlist { margin-top: 4px; }
         ${p.kind === 'resolve' ? '' : `<div class="fields">
           ${p.kind === 'craft' && tracked(pv.u) && pv.u.sh.crafts.length ? `<label>From ${esc(pv.u.name)}'s sheet <select id="f-craft"><option value="">Pick a craft…</option>${pv.u.sh.crafts.map((c, i) => `<option value="${i}" ${p.name === c.n ? 'selected' : ''}>${esc(c.n)} · ${c.cp} CP · +${c.d}</option>`).join('')}</select></label>` : ''}
           ${a.named ? `<label class="grow">${a.named}<input type="text" id="f-name" value="${esc(p.name || '')}" ${p.kind === 'arts' ? 'list="artsList"' : ''} autocomplete="off"></label>` : ''}
-          <label>${p.kind === 'arts' ? 'Cast time' : 'Base delay'}<input type="number" id="f-base" min="0" max="99" value="${p.base}"></label>
+          <label>${p.kind === 'arts' ? `Cast time${castMul(pv.u) < 1 ? ` <span class="muted">−${Math.round((1 - castMul(pv.u)) * 100)}% Cast</span>` : ''}` : 'Base delay'}<input type="number" id="f-base" min="0" max="99" value="${p.base}"></label>
           ${p.kind === 'arts' ? `<label>After-cast<input type="number" id="f-after" min="0" max="99" value="${p.after}"></label>` : ''}
           ${p.kind === 'craft' && tracked(pv.u) ? `<label>CP cost<input type="number" id="f-cp" min="0" max="200" value="${p.cp || 0}"></label>` : ''}
           ${p.kind === 'arts' && tracked(pv.u) ? `<label>EP cost<input type="number" id="f-ep" min="0" max="999" value="${p.ep || 0}"></label>` : ''}
           ${p.kind === 'scraft' && tracked(pv.u) && pv.u.cp >= CP_CAP ? `<label class="inline"><input type="checkbox" id="f-emp" ${p.emp !== false ? 'checked' : ''}> Empowered (spends all 200 CP)</label>` : ''}
           ${p.kind === 'scraft' && tracked(pv.u) && pv.u.cp < CP_CAP ? `<span class="muted" style="font-size:.85rem">Spends ${S_MIN} CP (${pv.u.cp} → ${Math.max(0, pv.u.cp - S_MIN)})</span>` : ''}
         </div>`}
-        ${p.kind === 'arts' ? `<p class="artinfo" id="f-artinfo">${artInfo(p, pv.u)}</p>` : ''}
+        ${p.kind === 'arts' ? `<p class="artinfo" id="f-artinfo">${artInfo(p, pv.u)}</p>${artPicks(pv.u)}` : ''}
         ${p.kind === 'craft' && tracked(pv.u) && (pv.u.sh.crafts.find(c => c.n === p.name) || {}).x ? `<p class="artinfo">${esc(pv.u.sh.crafts.find(c => c.n === p.name).x)}</p>` : ''}
         ${p.kind === 'scraft' && tracked(pv.u) && pv.u.sh.sc.x ? `<p class="artinfo">${esc(pv.u.sh.sc.x)}</p>` : ''}
         ${p.ph ? `<p class="artinfo"><span class="tag linked">FROM PHONE</span> ${esc(pv.u.name)} picked this and confirms it on their phone. You can still confirm or cancel here.</p>` : ''}
@@ -1714,6 +1761,18 @@ td .stlist { margin-top: 4px; }
       </form>`;
     }
     el.innerHTML = h;
+    // The art name box only suggests what this caster can cast.
+    const who = pv && pv.p.kind === 'arts' ? pv.u.id + '|' + castable(pv.u).length : 'all';
+    const dl = $('artsList');
+    if (dl.dataset.who !== who) { dl.dataset.who = who; dl.innerHTML = (pv && pv.p.kind === 'arts' ? castable(pv.u) : ARTS).map(a => `<option value="${esc(a.n)}">${ELEM_LABEL[a.g]} · ${a.ep} EP</option>`).join(''); }
+  }
+  /* Buttons for the arts this party member can cast (their orbment); enemies type any art. */
+  function artPicks(u) {
+    if (!tracked(u) || !u.sh || !u.sh.orb) return '';
+    const list = castable(u);
+    return `<div class="artpicks"><span class="muted">${esc(u.name)}'s arts:</span> ${list.length ? list.map(a =>
+      `<button type="button" class="btn small ${epCost(u, a) > u.ep ? 'ghost' : ''}" data-pickart="${esc(a.n)}" title="${a.ep} EP · ${esc(a.ar)}">${elDot(a.g)}${esc(a.n)}</button>`).join('')
+      : '<span class="muted">none on the orbment yet</span>'}</div>`;
   }
   /* What the named art does, with this caster's numbers, and whether their orbment has it. */
   function artInfo(p, u) {
@@ -1750,6 +1809,7 @@ td .stlist { margin-top: 4px; }
         <td><span class="sideicon ${u.side}" title="${u.side === 'ally' ? 'Party' : 'Enemy'}">${u.side === 'ally' ? ICON.shield : ICON.swords}</span></td>
         <td><input class="nameinput" type="text" id="name-${u.id}" value="${esc(u.name)}" data-uf="name" data-id="${u.id}" aria-label="Name">${u.note ? `<div class="enote">${esc(u.note)}</div>` : ''}${stChips(u, true)}</td>
         <td>${tracked(u) ? `<span class="num" title="Set on ${esc(u.name)}'s sheet">${fmtMod(spd(u))}</span>` : `<input type="number" id="spd-${u.id}" value="${u.speed}" min="-9" max="9" step="1" data-uf="speed" data-id="${u.id}" aria-label="Speed">${stFx(u).spd ? ` <span class="num" title="With statuses">→ ${fmtMod(spd(u))}</span>` : ''}`}</td>
+        <td>${tracked(u) ? `<span class="num" title="DEX modifier from ${esc(u.name)}'s sheet">${fmtSigned(initBonus(u))}</span>` : `<input type="number" id="init-${u.id}" value="${u.init || 0}" min="-5" max="10" data-uf="init" data-id="${u.id}" aria-label="${esc(u.name)} initiative bonus">`}</td>
         <td>${hpCell(u)}</td>
         <td class="status">${status}</td>
         <td><div class="rowbtns">
@@ -1757,15 +1817,15 @@ td .stlist { margin-top: 4px; }
           <button class="btn small" data-r="delay" data-id="${u.id}" title="Delay by the delay step" ${u.ko ? 'disabled' : ''}>+</button>
           <button class="btn small gold" data-r="sbreak" data-id="${u.id}" title="${esc(sBlock(u) ? sBlock(u).msg : 'S-Break: take the current turn now')}" ${u.ko || sBlock(u) ? 'disabled' : ''}>S-Break</button>
           ${e.kind === 'cast' && !u.ko ? `<button class="btn small" data-r="impede" data-id="${u.id}" title="Cancel the art being cast">Impede</button>` : ''}
-          ${tracked(u) ? '' : `<button class="btn small ${u.boss ? 'gold' : ''}" data-r="boss" data-id="${u.id}" title="Bosses halve ailments and stat downs on them and are immune to Petrify and K.O.">${u.boss ? 'Boss ✓' : 'Boss'}</button>`}
+          ${tracked(u) ? '' : `<button class="btn small ${u.boss ? 'gold' : ''}" data-r="boss" data-id="${u.id}" title="Bosses halve ailments and stat downs on them, rolls to inflict those have disadvantage, and they're immune to Petrify and K.O.">${u.boss ? 'Boss ✓' : 'Boss'}</button>`}
           <button class="btn small" data-r="ko" data-id="${u.id}">${u.ko ? 'Revive' : 'KO'}</button>
           <button class="btn small warn" data-r="remove" data-id="${u.id}" title="Remove from battle" aria-label="Remove ${esc(u.name)}">✕</button>
         </div></td></tr>`;
     }).join('');
     renderStForm();
     document.getElementById('roster').innerHTML =
-      `<thead><tr><th></th><th>Name</th><th title="Speed: + is faster">Speed</th><th title="Enemy HP is only shown to you">HP</th><th>Next</th><th>Controls</th></tr></thead><tbody>${rows ||
-      '<tr><td colspan="6" class="muted">No combatants yet.</td></tr>'}</tbody>`;
+      `<thead><tr><th></th><th>Name</th><th title="Speed: + is faster">Speed</th><th title="Added to the d20 when a battle starts: DEX for the party, set by you for enemies">Init</th><th title="Enemy HP is only shown to you">HP</th><th>Next</th><th>Controls</th></tr></thead><tbody>${rows ||
+      '<tr><td colspan="7" class="muted">No combatants yet.</td></tr>'}</tbody>`;
   }
   /* HP in the roster: party members show their numbers (edit them on the party cards); enemies get a simple tracker. */
   function hpCell(u) {
@@ -1813,9 +1873,11 @@ td .stlist { margin-top: 4px; }
     $('st-t').placeholder = t == null ? 'until cured' : String(t);
     const how = t == null ? ' Lasts until cured or used.'
       : s.kind === 'buff' ? ` ${s.t} turns${from ? ` + ${from.name}'s WIS` : ''} = ${t}.`
-      : ` ${s.t} turns${from ? ` + ${from.name}'s LCK` : ''}${tracked(u) ? ` − ${u.name}'s WIS` : ''}${u.boss ? ', halved for a boss' : ''} = ${t} (minimum 1).`;
+      : s.stun ? ` Stuns always last ${STUN_TURNS} turns${u.boss ? ', halved for a boss' : ''} = ${t}; each passes for ${S.costs.stun} (Stunned turn).`
+      : ` ${s.t} turns${s.kind === 'down' && from ? ` + ${from.name}'s LCK` : ''}${tracked(u) ? ` − ${u.name}'s WIS` : ''}${u.boss ? ', halved for a boss' : ''} = ${t} (minimum 1).`;
     const imm = immune(u, k);
-    $('st-help').textContent = `${s.n}: ${s.d}${how}${imm ? ` ${u.name} is immune: ${imm}.` : ''} Leave Turns empty for the default.`;
+    const dis = s.kind !== 'buff' && u.boss ? ' Rolls to inflict it on a boss have disadvantage.' : '';
+    $('st-help').textContent = `${s.n}: ${s.d}${how}${dis}${imm ? ` ${u.name} is immune: ${imm}.` : ''} Leave Turns empty for the default.`;
   }
   function renderSettings() {
     const st = S.settings;
@@ -1987,10 +2049,10 @@ td .stlist { margin-top: 4px; }
       c('Craft DC', d.craftDC, '8 + proficiency + STR or DEX: saves against area crafts'),
       c('Heals & revives', fmtSigned(d.wis), 'Add your WIS modifier to heals and revives'),
       c('Buff turns', fmtSigned(d.wis), 'Your buffs last their listed turns + WIS'),
-      c('Ailments on you', fmtSigned(-d.wis) + ' turns', 'Ailments and stat downs last their listed turns − your WIS (minimum 1)'),
+      c('Ailments on you', fmtSigned(-d.wis) + ' turns', 'Ailments and stat downs last their listed turns − your WIS (minimum 1); stuns are always 2 turns'),
       c('Weapon crit', critText(d.crit) + ' · ×1.5', 'Crit on 20 − your LCK modifier (if positive). Weapon crits deal 1.5× damage.'),
       c('Ailment rolls', fmtSigned(d.lck), 'Add LCK to the d20 when your art or quartz tries to inflict a status (+5% a point)'),
-      c('Ailments you inflict', fmtSigned(d.lck) + ' turns', 'Ailments and stat downs you inflict last their listed turns + your LCK'),
+      c('Stat downs you inflict', fmtSigned(d.lck) + ' turns', 'Stat downs you inflict last their listed turns + your LCK (ailments do not)'),
       c('Speed', fmtMod(d.speed), d.fx.spd ? 'Includes +1 from Action quartz' : ''),
       c('Move', d.mv + ' sq', d.strShort ? `−2 for ${d.arm.n} without STR ${d.arm.str}` : ''),
       d.notProf ? c('Armor', `not proficient (${sh.frame}: ${ARM_TIER[d.fr.arm]})`, '5e: disadvantage on STR and DEX checks, saves and attack rolls', 'warn') : '',
@@ -2108,7 +2170,7 @@ td .stlist { margin-top: 4px; }
   function artRow(a, d, u) {
     const roll = a.ro === 'Attack' ? `Attack ${fmtSigned(d.artAtk)}` : /save/.test(a.ro) ? `${a.ro} DC ${d.artDC}` : '';
     const fx = a.fx.replace(/\+ mod/g, (d.wis < 0 ? '− ' : '+ ') + Math.abs(d.wis));
-    const ep = u ? epCost(u, a) : a.ep, ct = u ? castTime(u, a) : a.c;
+    const ep = u ? epCost(u, a) : a.ep, ct = u ? Math.max(1, Math.round(a.c * castMul(u))) : a.c;
     return `<li><div class="an">${elDot(a.g)}<b>${esc(a.n)}</b><span class="num">${ep} EP</span></div>
       <div class="ad">${esc(a.ar)}${roll ? ' · ' + roll : ''} · cast ${ct}, rec. ${a.a}</div><div class="ad">${esc(fx)}</div></li>`;
   }
@@ -2214,7 +2276,7 @@ td .stlist { margin-top: 4px; }
     else if (r.kind === 'arts') {
       const a = ARTS_BY[String(r.art || '').toLowerCase()];
       if (!a || (u.sh.orb && !artsFor(u.sh.orb).can.includes(a))) return false;
-      p = { kind: 'arts', name: a.n, art: a.n, base: castTime(u, a), after: a.a, ep: epCost(u, a) };
+      p = { kind: 'arts', name: a.n, art: a.n, base: a.c, after: a.a, ep: epCost(u, a) };
     } else if (r.kind === 'craft') {
       const c = u.sh.crafts[Math.round(Number(r.i))]; if (!c) return false;
       p = { kind: 'craft', name: c.n, base: c.d, cp: c.cp };
@@ -2338,7 +2400,7 @@ td .stlist { margin-top: 4px; }
   function amStatus(me, cur) {
     if (me.ko) return "You're knocked out.";
     const stop = stopped(me);
-    if (stop.length) return `${stop.map(x => STATUS[x.k].n).join(', ')}: ${stop.some(x => STATUS[x.k].skip) ? 'your next turn is skipped.' : "you can't act."}`;
+    if (stop.length) return `${stop.map(x => STATUS[x.k].n).join(', ')}: you can't act; your turns pass quickly.`;
     if (!cur) return 'Waiting for the battle to start.';
     if (cur.unitId === me.id) return cur.kind === 'cast' ? `Your ${cur.art} is about to resolve.` : "It's your turn!";
     const q = queue(), i = q.findIndex(e => e.unitId === me.id);
@@ -2371,7 +2433,7 @@ td .stlist { margin-top: 4px; }
         <button class="btn ghost" data-am="act" data-k="cancel">Cancel</button></div></div>`;
     }
     const stop = stopped(me);
-    if (stop.length) h += `<div class="stbanner"><span><b>${esc(stop.map(x => STATUS[x.k].n).join(', '))}:</b> ${stop.some(x => STATUS[x.k].skip) ? 'this turn is skipped.' : "you can't act."}</span><button class="btn primary" data-am="act" data-k="skip">Skip turn</button></div>`;
+    if (stop.length) h += `<div class="stbanner"><span><b>${esc(stop.map(x => STATUS[x.k].n).join(', '))}:</b> you can't act; this turn passes (+${fmtT(delay(S.costs.stun, spd(me)))}).</span><button class="btn primary" data-am="act" data-k="skip">Pass turn</button></div>`;
     const lock = { arts: hasSt(me, 'noArts') ? 'muted' : '', craft: hasSt(me, 'noCraft') ? 'sealed' : !me.sh.crafts.length ? 'none on sheet' : '', scraft: sBlock(me) ? sBlock(me).short : '' };
     const b = (k, label, sub, pick) => `<button class="actbtn ${amPick === k ? 'on' : ''} ${k === 'scraft' ? 'scraft' : ''}" ${pick ? `data-am="pick" data-k="${k}"` : `data-am="act" data-k="${k}"`} ${lock[k] ? 'disabled' : ''}><b>${label}</b><span>${lock[k] || sub}</span></button>`;
     h += `<div class="actions">${b('attack', 'Attack', dl('attack'))}${b('craft', 'Craft…', 'from your sheet', 1)}${b('arts', 'Arts…', 'your orbment', 1)}
@@ -2384,7 +2446,7 @@ td .stlist { margin-top: 4px; }
         const roll = a.ro === 'Attack' ? `Attack ${fmtSigned(d.artAtk)}` : /save/.test(a.ro) ? `${a.ro} DC ${d.artDC}` : '';
         return `<button class="pickrow" data-am="act" data-k="arts" data-art="${esc(a.n)}" ${poor ? 'disabled' : ''}>
           <span class="an">${elDot(a.g)}<b>${esc(a.n)}</b><span class="num">${ep} EP${poor ? ' · not enough' : ''}</span></span>
-          <span class="ad">${esc(a.ar)}${roll ? ' · ' + roll : ''} · cast +${fmtT(delay(castTime(me, a), sp))}, then +${fmtT(delay(a.a, sp))}</span>
+          <span class="ad">${esc(a.ar)}${roll ? ' · ' + roll : ''} · cast +${fmtT(delay(a.c * castMul(me), sp))}, then +${fmtT(delay(a.a, sp))}</span>
           <span class="ad">${esc(a.fx.replace(/\+ mod/g, (d.wis < 0 ? '− ' : '+ ') + Math.abs(d.wis)))}</span></button>`;
       }).join('') : '<p class="muted">No arts on your orbment yet.</p>') + '</div>';
     }
@@ -2930,6 +2992,8 @@ td .stlist { margin-top: 4px; }
       return;
     }
     if (ev.target.closest('[data-cmd="closesheet"]')) { gmSheetId = null; return render(); }
+    const pa = ev.target.closest('[data-pickart]');
+    if (pa) { const inp = $('f-name'); if (inp) { inp.value = pa.dataset.pickart; inp.dispatchEvent(new Event('input', { bubbles: true })); render(); } return; }
     const pq = ev.target.closest('[data-pq]');
     if (pq) {
       const u = U(pq.dataset.id); if (!tracked(u)) return;
@@ -2961,7 +3025,8 @@ td .stlist { margin-top: 4px; }
     if (t.dataset.cmd) {
       const c = t.dataset.cmd;
       if (c === 'undo') return undo();
-      if (c === 'newbattle') return newBattle();
+      if (c === 'newbattle') return newBattle($('bt-open') ? $('bt-open').value : 'normal');
+      if (c === 'clearenemies') return clearEnemies();
       if (c === 'present') { document.body.classList.toggle('present'); lastFront = null; return render(); }
       if (c === 'fullscreen') return fullscreen();
       if (c === 'reroll') { snapshot(); S.seed = (Math.random() * 2 ** 31) | 0; S.overrides = {}; addLog('Upcoming AT bonuses rerolled'); return commit(); }
@@ -3061,6 +3126,7 @@ td .stlist { margin-top: 4px; }
       return dCommit();
     }
     if (ev.target.id === 'pendForm') return confirmPending();
+    if (ev.target.id === 'battleForm') return newBattle($('bt-open').value);
     if (ev.target.id === 'encForm') {
       const enc = ENCOUNTERS[$('enc-pick').value]; if (!enc) return;
       snapshot();
@@ -3070,7 +3136,7 @@ td .stlist { margin-top: 4px; }
         for (let k = 0; k < f.n; k++) {
           const id = 'u' + (S.idN++);
           const name = f.n > 1 ? `${f.name} ${String.fromCharCode(65 + k)}` : f.name;
-          const nu = { id, name, side: 'enemy', speed: f.speed, hp: f.hp, hpMax: f.hp, note: f.note };
+          const nu = { id, name, side: 'enemy', speed: f.speed, hp: f.hp, hpMax: f.hp, init: f.init || 0, note: f.note };
           if (f.boss) nu.boss = true;
           S.units.push(nu);
           // Stagger their first turns across one attack so they don't all go at once.
@@ -3102,7 +3168,7 @@ td .stlist { margin-top: 4px; }
       snapshot();
       const id = 'u' + (S.idN++);
       const ehp = Math.max(0, Math.round(Number($('add-hp').value) || 0));
-      const nu = side === 'ally' ? { id, name, side, speed: 0, hp: 0, hpMax: 0, ep: 0, epMax: 0, cp: 0 } : { id, name, side, speed, hp: ehp, hpMax: ehp };
+      const nu = side === 'ally' ? { id, name, side, speed: 0, hp: 0, hpMax: 0, ep: 0, epMax: 0, cp: 0 } : { id, name, side, speed, hp: ehp, hpMax: ehp, init: clampInit($('add-init').value) };
       if (side === 'ally') {
         // New party members start as a Balanced frame at full HP; a speed typed here makes it a custom frame.
         nu.sh = normSheet(speed ? { v: 3, frame: 'Custom', fspd: speed } : { v: 3 }, { sh: true });
@@ -3115,11 +3181,12 @@ td .stlist { margin-top: 4px; }
       else e.tick = r1((front ? front.tick : S.now) + delay(S.costs.attack, spd(nu)));
       S.entries.push(e);
       addLog(`${name} joins the battle`);
-      document.getElementById('add-name').value = ''; $('add-hp').value = '';
+      document.getElementById('add-name').value = ''; $('add-hp').value = ''; $('add-init').value = '';
       commit();
     }
   });
   const clampSpd = v => Math.max(-9, Math.min(9, Math.round(Number(v) || 0)));
+  const clampInit = v => Math.max(-5, Math.min(10, Math.round(Number(v) || 0)));
 
   /* Panels skip redrawing while you type in them; catch up once focus leaves. If focus left because a
      button is being pressed, wait until the click has landed so the redraw can't swallow it. */
@@ -3170,7 +3237,7 @@ td .stlist { margin-top: 4px; }
         const a = S.pending.kind === 'arts' ? ARTS_BY[t.value.trim().toLowerCase()] : null;
         if (a && S.pending.art !== a.n) {
           const u = U(S.pending.unitId);
-          S.pending.art = a.n; S.pending.base = castTime(u, a); S.pending.after = a.a;
+          S.pending.art = a.n; S.pending.base = a.c; S.pending.after = a.a;
           if (tracked(u)) S.pending.ep = epCost(u, a);
           [['f-base', S.pending.base], ['f-after', a.a], ['f-ep', S.pending.ep ?? a.ep]].forEach(([id, v]) => { const el = $(id); if (el) el.value = v; });
         }
@@ -3273,6 +3340,7 @@ td .stlist { margin-top: 4px; }
       snapshot();
       if (t.dataset.uf === 'name') { const v = t.value.trim(); if (v) u.name = v; }
       if (t.dataset.uf === 'speed') u.speed = clampSpd(t.value);
+      if (t.dataset.uf === 'init') u.init = clampInit(t.value);
       if (t.dataset.uf === 'ehpMax') {
         const m = Math.max(0, Math.round(Number(t.value) || 0));
         const was = Number(u.hpMax) || 0;
@@ -3294,7 +3362,7 @@ td .stlist { margin-top: 4px; }
   function readLiveCode() { try { return localStorage.getItem(LIVE_KEY); } catch (e) { return null; } }
 
   $('enc-pick').innerHTML = Object.keys(ENCOUNTERS).map(k => `<option value="${k}">${esc(ENCOUNTERS[k].n)}</option>`).join('');
-  $('artsList').innerHTML = ARTS.map(a => `<option value="${esc(a.n)}">${ELEM_LABEL[a.g]} · ${a.ep} EP</option>`).join('');
+
   if (PLAYER) startPlayer();
   else {
     render();
