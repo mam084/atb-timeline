@@ -404,6 +404,13 @@ body.present .timeline { grid-template-columns: repeat(auto-fill, minmax(140px, 
 .oslot.sel { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ocenter .oslot { width: 120px; border-radius: 999px; align-items: center; text-align: center; }
 .tot b { font-family: var(--font-mono); font-weight: 500; }
+.sepwrap { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 0 0 10px; font-size: .85rem; }
+.sepgrid { display: flex; flex-wrap: wrap; gap: 6px; }
+.sep { display: inline-flex; flex-direction: row; align-items: center; gap: 4px; padding: 2px 6px 2px 8px; border: 1px solid color-mix(in srgb, var(--el) 50%, var(--line)); border-radius: 999px; }
+.sep input[type="number"] { width: 3.4em; padding: 2px 4px; }
+.sep b { font-family: var(--font-mono); font-weight: 500; min-width: 1.2em; text-align: right; }
+.sepx { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.sepx input[type="number"] { width: 3.4em; padding: 2px 4px; }
 .mt { flex-direction: row; align-items: center; gap: 0; }
 .mt input[type="number"] { width: 3.2em; padding: 3px 4px; }
 .mt .mtk { font-size: .72rem; color: var(--muted); margin-right: 3px; }
@@ -851,6 +858,10 @@ td .stlist { margin-top: 4px; }
   const ELEM = ['earth', 'water', 'fire', 'wind', 'time', 'space', 'mirage'];
   const ELEM_LABEL = { earth: 'Earth', water: 'Water', fire: 'Fire', wind: 'Wind', time: 'Time', space: 'Space', mirage: 'Mirage' };
   const CENTER_EP = 60, SLOT_EP = [20, 45, 80, 125, 180, 245];
+  /* Sepith (Core Rules › Sepith): one shared party pool of the seven elements. Opening a slot costs sepith by depth;
+     an element-locked slot is paid in its element, a free slot in any. Exchange is 2 of one element for 1 of another. */
+  const SLOT_SEPITH = [2, 3, 4, 6, 8, 10];
+  const cleanSepith = x => Object.fromEntries(ELEM.map(e => { const v = Math.round(Number(x && x[e])); return [e, isFinite(v) && v > 0 ? Math.min(9999, v) : 0]; }));
   const EPCUT_PCT = 10; // EP Cut 1: arts' EP cost −10% (Daybreak's version)
   const CAST_PCT = 10;  // Cast 1: arts' cast time −10% (Daybreak's version)
   /* Ways to split the 6 line slots into lines. */
@@ -1151,6 +1162,7 @@ td .stlist { margin-top: 4px; }
       settings: Object.assign({}, DEF_SETTINGS),
       gains: Object.assign({}, DEF_GAINS),
       mira: 4200,
+      sepith: { earth: 3, water: 5, fire: 2, wind: 1, time: 0, space: 2, mirage: 1 },
       pending: null,
       log: [{ t: 0, text: 'Sample encounter loaded. Edit the roster or press New battle.' }]
     };
@@ -1173,6 +1185,7 @@ td .stlist { margin-top: 4px; }
     s.gains = Object.assign({}, DEF_GAINS, s.gains);
     delete s.settings.modMin; delete s.settings.modMax;
     if (typeof s.mira !== 'number' || !isFinite(s.mira)) s.mira = 0;
+    s.sepith = cleanSepith(s.sepith);
     s.units.forEach(u => {
       // Older tables stored a delay modifier (negative = faster); speed is the same number with the sign flipped.
       if (typeof u.speed !== 'number') u.speed = typeof u.mod === 'number' ? -u.mod : 0;
@@ -1358,6 +1371,14 @@ td .stlist { margin-top: 4px; }
       slot.o = !!r.on; if (!slot.o) slot.q = null;
       syncSheet(u); lg(`${where} ${slot.o ? 'unlocked' : 'locked'}`); return true;
     }
+    if (r.op === 'pay') {
+      // Unlock a line slot and pay its sepith from the shared pool.
+      if (!slot || slot.o || li === -1) return false;
+      const cost = SLOT_SEPITH[si], el = slot.l || r.el;
+      if (!cost || !ELEM.includes(el) || S.sepith[el] < cost) return false;
+      S.sepith[el] -= cost; slot.o = true;
+      syncSheet(u); lg(`${where} unlocked for ${cost} ${ELEM_LABEL[el]} sepith (${S.sepith[el]} left)`); return true;
+    }
     if (r.op === 'lock') {
       const el = ELEM.includes(r.el) ? r.el : null;
       if (!slot || slot.l === el) return false;
@@ -1397,6 +1418,24 @@ td .stlist { margin-top: 4px; }
     const n = S.mira - before;
     if (!n) return false;
     addLog(`${who ? who + ' ' : ''}${n < 0 ? 'spends' : 'adds'} ${Math.abs(n).toLocaleString()} mira → ${S.mira.toLocaleString()} in the agency's funds`);
+    return true;
+  }
+  function changeSepith(el, d, who) {
+    d = Math.round(Number(d));
+    if (!ELEM.includes(el) || !isFinite(d) || !d) return false;
+    const before = S.sepith[el];
+    S.sepith[el] = Math.max(0, Math.min(9999, before + d));
+    const n = S.sepith[el] - before;
+    if (!n) return false;
+    addLog(`${who ? who + ' ' : ''}${n < 0 ? 'spends' : 'adds'} ${Math.abs(n)} ${ELEM_LABEL[el]} sepith → ${S.sepith[el]} in the pool`);
+    return true;
+  }
+  /* Exchange: 2 of one element for 1 of another, n times. */
+  function exchangeSepith(from, to, n) {
+    n = Math.round(Number(n));
+    if (!ELEM.includes(from) || !ELEM.includes(to) || from === to || !(n > 0) || S.sepith[from] < 2 * n) return false;
+    S.sepith[from] -= 2 * n; S.sepith[to] = Math.min(9999, S.sepith[to] + n);
+    addLog(`Sepith exchanged: ${2 * n} ${ELEM_LABEL[from]} → ${n} ${ELEM_LABEL[to]}`);
     return true;
   }
 
@@ -1940,6 +1979,7 @@ td .stlist { margin-top: 4px; }
     return `<div class="pmeta"><span>Speed <b>${fmtMod(d.speed)}</b></span><span>Crit <b>${critText(d.crit)}</b></span><span>Art DC <b>${d.artDC}</b></span><span>AC <b>${d.ac}</b></span></div>`;
   }
   const miraText = () => `${S.mira.toLocaleString()} mira`;
+  const sepChips = () => `<span class="sepgrid">${ELEM.map(e => `<span class="sep el-${e}" title="${ELEM_LABEL[e]}">${elDot(e)}<b>${S.sepith[e]}</b></span>`).join('')}</span>`;
   function renderParty() {
     const el = $('party');
     const allies = S.units.filter(tracked);
@@ -1964,7 +2004,11 @@ td .stlist { margin-top: 4px; }
     }).join('');
     const mira = editable ? `<label class="inline">Agency funds <input type="number" id="mira" min="0" value="${S.mira}" style="width:7em" aria-label="Mira"> mira</label>`
       : `<span class="muted">Agency funds <b class="num" style="color:var(--gold)">${miraText()}</b></span>`;
-    el.innerHTML = `<div class="panel-head"><h3>Party</h3>${mira}</div><div class="partygrid">${cards}</div>`;
+    const sep = editable
+      ? `<div class="sepwrap"><span class="muted">Sepith</span><span class="sepgrid">${ELEM.map(e => `<label class="sep el-${e}" title="${ELEM_LABEL[e]}">${elDot(e)}<input type="number" min="0" data-sep="${e}" value="${S.sepith[e]}" aria-label="${ELEM_LABEL[e]} sepith"></label>`).join('')}</span>
+        <span class="sepx">Exchange 2 <select id="sx-from" aria-label="Give">${ELEM.map(e => `<option value="${e}">${ELEM_LABEL[e]}</option>`).join('')}</select> → 1 <select id="sx-to" aria-label="Get">${ELEM.map((e, i) => `<option value="${e}" ${i === 1 ? 'selected' : ''}>${ELEM_LABEL[e]}</option>`).join('')}</select> ×<input type="number" id="sx-n" min="1" value="1" aria-label="Times"><button type="button" class="btn small" data-cmd="sepx">Trade</button></span></div>`
+      : `<div class="sepwrap"><span class="muted">Sepith</span>${sepChips()}</div>`;
+    el.innerHTML = `<div class="panel-head"><h3>Party</h3>${mira}</div>${sep}<div class="partygrid">${cards}</div>`;
   }
 
   /* ---------- the character sheet (GM panel and phones share this) ---------- */
@@ -2145,6 +2189,13 @@ td .stlist { margin-top: 4px; }
         <label class="inline"><input type="checkbox" data-oop="open" ${s.o ? 'checked' : ''}> Unlocked</label>
         <label>Element lock <select data-oop="lock">${['', ...ELEM].map(e => `<option value="${e}" ${s.l === (e || null) ? 'selected' : ''}>${e ? ELEM_LABEL[e] + ' only' : 'Any element'}</option>`).join('')}</select></label>
       </div>`;
+    if (!s.o && li !== -1) {
+      const cost = SLOT_SEPITH[si], els = s.l ? [s.l] : ELEM, ok = els.filter(e => S.sepith[e] >= cost);
+      if (gm) h += `<div class="row sepx">Opens for <b>${cost}</b> ${s.l ? `${elDot(s.l)}${ELEM_LABEL[s.l]}` : ''} sepith
+        ${s.l ? `<span class="muted">(${S.sepith[s.l]} in the pool)</span>` : `<select data-opay-el aria-label="Pay with">${ELEM.map(e => `<option value="${e}" ${S.sepith[e] < cost ? 'disabled' : ''} ${e === (ok[0] || ELEM[0]) ? 'selected' : ''}>${ELEM_LABEL[e]} (${S.sepith[e]})</option>`).join('')}</select>`}
+        <button type="button" class="btn small primary" data-opay ${ok.length ? '' : 'disabled title="Not enough sepith in the pool"'}>Pay and unlock</button></div>`;
+      return h + `<p class="muted">${gm ? 'Tick Unlocked instead to open it without paying.' : `This slot is locked. It opens for ${cost} ${s.l ? ELEM_LABEL[s.l] + ' ' : ''}sepith at an orbal factory (or with an orbal engineer); the GM unlocks it.`}</p></div>`;
+    }
     if (!s.o) return h + `<p class="muted">${gm ? 'Unlock this slot to put quartz in it.' : 'This slot is locked. The GM unlocks slots with sepith.'}</p></div>`;
     const taken = k => k === 'action1' && placed(o).some(x => x.k === k) && !(s.q && s.q.k === k);
     const cur = qInfo(s.q), cq = s.q && !s.q.k ? s.q : null;
@@ -2345,6 +2396,7 @@ td .stlist { margin-top: 4px; }
     else if (amTab === 'orb') fillOrb($('am-orb'), me, 'po', false);
     else {
       const m = $('am-mira'); if (m) m.textContent = miraText();
+      const sp = $('am-sep'); if (sp) sp.innerHTML = sepChips();
       const ae = $('am-act');
       if (ae && !(ae.contains(document.activeElement) && document.activeElement.matches('input, select, textarea'))) ae.innerHTML = amActHtml(me);
     }
@@ -2394,6 +2446,7 @@ td .stlist { margin-top: 4px; }
       <div class="grp"><h3>Agency funds · <span class="num" id="am-mira" style="color:var(--gold)">${miraText()}</span></h3><div class="qbtns">
         <button class="btn" data-am="mira" data-s="-1">Spend mira</button>
         <button class="btn" data-am="mira" data-s="1">Add mira</button></div></div>
+      <div class="grp"><h3>Sepith pool</h3><div id="am-sep">${sepChips()}</div></div>
       <p class="errtext" id="amErr" hidden></p>
       <div><button class="btn small ghost" data-am="switch">Not you?</button></div>`;
   }
@@ -2939,6 +2992,11 @@ td .stlist { margin-top: 4px; }
     if (ol) return orbDo(orbUnit(ol), { op: 'layout', v: ol.dataset.olay });
     const on = ev.target.closest('button[data-oop="new"]');
     if (on) return orbDo(orbUnit(on), { op: 'new' });
+    const op = ev.target.closest('button[data-opay]');
+    if (op && orbSel && !PLAYER) {
+      const sel = op.parentElement.querySelector('[data-opay-el]');
+      return orbDo(orbUnit(op), { op: 'pay', li: orbSel.li, si: orbSel.si, el: sel ? sel.value : null });
+    }
     if (PLAYER) {
       if (ev.target.closest('[data-cmd="fullscreen"]')) return fullscreen();
       const m = ev.target.closest('[data-me]');
@@ -3025,6 +3083,11 @@ td .stlist { margin-top: 4px; }
     if (t.dataset.cmd) {
       const c = t.dataset.cmd;
       if (c === 'undo') return undo();
+      if (c === 'sepx') {
+        snapshot();
+        if (exchangeSepith($('sx-from').value, $('sx-to').value, $('sx-n').value)) return commit();
+        undoStack.pop(); t.textContent = 'Not enough'; setTimeout(() => { t.textContent = 'Trade'; }, 1400); return;
+      }
       if (c === 'newbattle') return newBattle($('bt-open') ? $('bt-open').value : 'normal');
       if (c === 'clearenemies') return clearEnemies();
       if (c === 'present') { document.body.classList.toggle('present'); lastFront = null; return render(); }
@@ -3302,6 +3365,12 @@ td .stlist { margin-top: 4px; }
       return commit();
     }
     if (t.id === 'st-who' || t.id === 'st-k' || t.id === 'st-from') return stHint();
+    if (t.dataset.sep) {
+      const el = t.dataset.sep, v = Math.max(0, Math.round(Number(t.value) || 0));
+      snapshot();
+      if (changeSepith(el, v - S.sepith[el], 'GM')) return commit();
+      undoStack.pop(); return render();
+    }
     if (t.id === 'mira') {
       const v = Math.max(0, Math.round(Number(t.value) || 0));
       snapshot();
