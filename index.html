@@ -912,7 +912,7 @@ td .stlist { margin-top: 4px; }
   function newOrb(lay) {
     const o = { lay: '6', c: newSlot(true), L: [], man: false, tot: [] };
     relayout(o, LAYOUTS.includes(lay) ? lay : '6');
-    o.L.forEach((line, i) => { line[0].o = i === 0; }); // center + the first slot of line 1 start unlocked
+    o.L.forEach(line => { line[0].o = false; }); // only the center starts unlocked; line slots open with sepith
     return o;
   }
   function normOrb(o) {
@@ -940,11 +940,12 @@ td .stlist { margin-top: 4px; }
   function lineTotals(o) {
     if (!o) return [];
     if (o.man) return o.L.map((_, i) => Object.assign(zeroEl(), o.tot[i]));
+    // A quartz in an element-locked slot counts double (Core Rules › Orbments).
     const cq = o.c.o ? qInfo(o.c.q) : null;
     return o.L.map(line => {
       const t = zeroEl();
-      line.forEach(s => { const qi = s.o ? qInfo(s.q) : null; if (qi) t[qi.el] += qi.v; });
-      if (cq) t[cq.el] += cq.v;
+      line.forEach(s => { const qi = s.o ? qInfo(s.q) : null; if (qi) t[qi.el] += qi.v * (s.l ? 2 : 1); });
+      if (cq) t[cq.el] += cq.v * (o.c.l ? 2 : 1);
       return t;
     });
   }
@@ -1339,7 +1340,7 @@ td .stlist { margin-top: 4px; }
     if (r.op === 'new') {
       if (!gm || sh.orb) return false;
       const lay = frameOf(sh) ? frameOf(sh).lay : '6';
-      sh.orb = newOrb(lay); syncSheet(u); lg(`designed with ${lay} lines (center + 1 slot unlocked)`); return true;
+      sh.orb = newOrb(lay); syncSheet(u); lg(`designed with ${lay} lines (center unlocked)`); return true;
     }
     const o = sh.orb; if (!o) return false;
     const li = Math.round(Number(r.li)), si = Math.round(Number(r.si));
@@ -1374,7 +1375,7 @@ td .stlist { margin-top: 4px; }
     if (r.op === 'pay') {
       // Unlock a line slot and pay its sepith from the shared pool.
       if (!slot || slot.o || li === -1) return false;
-      const cost = SLOT_SEPITH[si], el = slot.l || r.el;
+      const cost = SLOT_SEPITH[si] * (slot.l ? 2 : 1), el = slot.l || r.el; // element-locked slots cost double, in their element
       if (!cost || !ELEM.includes(el) || S.sepith[el] < cost) return false;
       S.sepith[el] -= cost; slot.o = true;
       syncSheet(u); lg(`${where} unlocked for ${cost} ${ELEM_LABEL[el]} sepith (${S.sepith[el]} left)`); return true;
@@ -2171,8 +2172,8 @@ td .stlist { margin-top: 4px; }
     const ep = li === -1 ? CENTER_EP : SLOT_EP[si];
     const cls = ['oslot', s.o ? '' : 'closed', s.l ? 'lk el-' + s.l : '', qi ? 'filled el-' + qi.el : '', sel ? 'sel' : ''].join(' ');
     const body = !s.o ? `<span class="on">Locked</span><span class="os">+${ep} EP</span>`
-      : qi ? `<span class="on">${esc(qi.n)}</span><span class="os">${elDot(qi.el)}${ELEM_LABEL[qi.el]} ${qi.v}</span>`
-      : `<span class="on muted">Empty</span><span class="os">${s.l ? elDot(s.l) + ELEM_LABEL[s.l] + ' only' : 'Any element'}</span>`;
+      : qi ? `<span class="on">${esc(qi.n)}</span><span class="os">${elDot(qi.el)}${ELEM_LABEL[qi.el]} ${s.l ? `${qi.v * 2} (×2)` : qi.v}</span>`
+      : `<span class="on muted">Empty</span><span class="os">${s.l ? elDot(s.l) + ELEM_LABEL[s.l] + ' only, ×2' : 'Any element'}</span>`;
     return `<button type="button" class="${cls}" data-oslot="${li},${si}" data-id="${u.id}" aria-label="${li === -1 ? 'Center slot' : `Line ${li + 1} slot ${si + 1}`}">${body}</button>`;
   }
   function totHtml(t) {
@@ -2190,7 +2191,7 @@ td .stlist { margin-top: 4px; }
         <label>Element lock <select data-oop="lock">${['', ...ELEM].map(e => `<option value="${e}" ${s.l === (e || null) ? 'selected' : ''}>${e ? ELEM_LABEL[e] + ' only' : 'Any element'}</option>`).join('')}</select></label>
       </div>`;
     if (!s.o && li !== -1) {
-      const cost = SLOT_SEPITH[si], els = s.l ? [s.l] : ELEM, ok = els.filter(e => S.sepith[e] >= cost);
+      const cost = SLOT_SEPITH[si] * (s.l ? 2 : 1), els = s.l ? [s.l] : ELEM, ok = els.filter(e => S.sepith[e] >= cost);
       if (gm) h += `<div class="row sepx">Opens for <b>${cost}</b> ${s.l ? `${elDot(s.l)}${ELEM_LABEL[s.l]}` : ''} sepith
         ${s.l ? `<span class="muted">(${S.sepith[s.l]} in the pool)</span>` : `<select data-opay-el aria-label="Pay with">${ELEM.map(e => `<option value="${e}" ${S.sepith[e] < cost ? 'disabled' : ''} ${e === (ok[0] || ELEM[0]) ? 'selected' : ''}>${ELEM_LABEL[e]} (${S.sepith[e]})</option>`).join('')}</select>`}
         <button type="button" class="btn small primary" data-opay ${ok.length ? '' : 'disabled title="Not enough sepith in the pool"'}>Pay and unlock</button></div>`;
